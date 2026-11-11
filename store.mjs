@@ -113,12 +113,14 @@ export class CampusService {
     }
   }
 
-  /** 校外模式配置：合并默认值，保证各字段齐全；默认关闭时各纯函数直接放行。 */
+  /** 校外模式配置：BJUT 专用，只认开关与网关 Cookie，其余（含网关地址）一律用内置值。 */
   webvpnConfig() {
     const raw = this.store?.settings?.webvpn
-    return raw && typeof raw === 'object'
-      ? { ...core.DEFAULT_WEBVPN, ...raw }
-      : { ...core.DEFAULT_WEBVPN }
+    return {
+      ...core.DEFAULT_WEBVPN,
+      enabled: Boolean(raw?.enabled),
+      cookie: String(raw?.cookie || ''),
+    }
   }
 
   /* ------------------------------ 抓取 ------------------------------ */
@@ -990,11 +992,13 @@ export class CampusService {
         if (Array.isArray(patch.autoRemindBefore) && patch.autoRemindBefore.length) {
           settings.autoRemindBefore = patch.autoRemindBefore.map((n) => numberOr(n, 60, 0, 100_000))
         }
-        /* 校外模式配置跟着 settings 存进 store.json：逐字段合并，留空不覆盖网关 Cookie */
+        /* 校外模式只存开关与网关 Cookie；网关地址、重写模板、登录页特征一律用内置值 */
         if (patch.webvpn && typeof patch.webvpn === 'object') {
-          const next = { ...core.DEFAULT_WEBVPN, ...(settings.webvpn || {}) }
-          for (const key of ['gateway', 'rewriteTemplate', 'loginPagePattern']) {
-            if (typeof patch.webvpn[key] === 'string') next[key] = patch.webvpn[key].trim()
+          const current = settings.webvpn || core.DEFAULT_WEBVPN
+          const next = {
+            ...core.DEFAULT_WEBVPN,
+            enabled: Boolean(current.enabled),
+            cookie: String(current.cookie || ''),
           }
           if (typeof patch.webvpn.enabled === 'boolean') next.enabled = patch.webvpn.enabled
           if (typeof patch.webvpn.cookie === 'string' && patch.webvpn.cookie.trim()) {
@@ -1024,9 +1028,7 @@ export class CampusService {
     /* 网关 Cookie 只在服务端用，不回传给浏览器 */
     const publicWebvpn = {
       enabled: Boolean(vpn.enabled),
-      gateway: String(vpn.gateway || ''),
-      rewriteTemplate: String(vpn.rewriteTemplate || core.DEFAULT_REWRITE_TEMPLATE),
-      loginPagePattern: String(vpn.loginPagePattern || core.DEFAULT_LOGIN_PAGE_PATTERN),
+      gateway: core.WEBVPN_GATEWAY,
       hasCookie: Boolean(vpn.cookie),
     }
     return {

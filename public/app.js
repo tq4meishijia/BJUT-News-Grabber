@@ -532,9 +532,6 @@ function viewSettings() {
       accountService: (state.meta?.account?.service || '').toString(),
       accountUser: (state.meta?.account?.username || '').toString(),
       accountPassword: '',
-      webvpnGateway: (settings.webvpn?.gateway || '').toString(),
-      webvpnTemplate: (settings.webvpn?.rewriteTemplate || '').toString(),
-      webvpnLoginPattern: (settings.webvpn?.loginPagePattern || '').toString(),
       webvpnCookie: '',
     }
   }
@@ -564,16 +561,14 @@ function viewSettings() {
     <div class="card">
       <label class="switch"><input type="checkbox" data-act="toggle-webvpn" ${state.settings.webvpn?.enabled ? 'checked' : ''} />开启校外模式：列表、翻页、详情全部走学校 WebVPN</label>
       <div class="hint">
-        校外直连不到校内门户时打开。开启后程序把每个出站地址按下面的模板改写成网关地址，响应里被网关改写过的链接再还原成门户原始地址，
+        BJUT 专用：网关地址已内置为 <code>${esc(state.settings.webvpn?.gateway || '')}</code>，地址重写规则也已内置，<b>无需填写任何配置</b>。
+        校外直连不到校内门户时打开本开关。开启后程序把每个出站地址改写成网关地址，响应里被网关改写过的链接再还原成门户原始地址，
         所以数据源里的 <code>url</code> / <code>pageUrl</code> / <code>detailUrlTemplate</code> <b>保持校内原始地址，不用手改</b>。关掉开关后与校内直连完全一致。
       </div>
-      <label class="field"><span>网关地址</span><input data-scope="settings" data-field="webvpnGateway" value="${esc(draft.webvpnGateway)}" placeholder="https://webvpn.example.edu.cn" /></label>
-      <label class="field"><span>重写模板（{gateway} 网关地址，{url} 原始网址）</span><input data-scope="settings" data-field="webvpnTemplate" value="${esc(draft.webvpnTemplate)}" placeholder="{gateway}/proxy?url={url}" /></label>
-      <label class="field"><span>登录页特征（正则，命中即判定网关会话过期）</span><input data-scope="settings" data-field="webvpnLoginPattern" value="${esc(draft.webvpnLoginPattern)}" /></label>
       <label class="field"><span>网关会话 Cookie${state.settings.webvpn?.hasCookie ? '（已保存，留空不修改）' : ''}</span><textarea data-scope="settings" data-field="webvpnCookie" placeholder="浏览器登录 WebVPN 后，从 F12 → Network 复制整条 Cookie">${esc(draft.webvpnCookie)}</textarea></label>
       <div class="actions">
         <button class="btn ghost" data-act="webvpn-clear-cookie">清除网关 Cookie</button>
-        <button class="btn primary" data-act="webvpn-save">保存校外模式设置</button>
+        <button class="btn primary" data-act="webvpn-save">保存网关 Cookie</button>
       </div>
     </div>
 
@@ -904,15 +899,9 @@ document.addEventListener('click', async (event) => {
     case 'webvpn-save': {
       const draft = drafts.settings
       if (!draft) break
-      const webvpn = {
-        gateway: (draft.webvpnGateway || '').trim(),
-        rewriteTemplate: (draft.webvpnTemplate || '').trim(),
-        loginPagePattern: (draft.webvpnLoginPattern || '').trim(),
-      }
       const cookie = (draft.webvpnCookie || '').trim()
       draft.webvpnCookie = ''
-      if (cookie) webvpn.cookie = cookie
-      await api('settings.save', { settings: { webvpn } })
+      await api('settings.save', { settings: { webvpn: cookie ? { cookie } : {} } })
       break
     }
     case 'webvpn-clear-cookie': {

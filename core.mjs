@@ -86,17 +86,20 @@ const DEFAULT_SOURCES = [
 /* 校外模式（WebVPN）：出站地址统一重写，响应里的链接统一还原             */
 /* ------------------------------------------------------------------ */
 
-/** 默认重写模板：一种常见网关形态——把门户原始网址整条编码进网关的 url 参数。 */
+/** BJUT 专用：WebVPN 网关内置，界面与配置里都不需要填地址。换网关改这一行。 */
+const WEBVPN_GATEWAY = 'https://webvpn.bjut.edu.cn'
+
+/** 默认重写模板：把门户原始网址整条编码进网关的 url 参数。 */
 const DEFAULT_REWRITE_TEMPLATE = '{gateway}/proxy?url={url}'
 
 /** 默认「网关会话过期」登录页特征：只认通用登录页结构，不写死某校文案。 */
 const DEFAULT_LOGIN_PAGE_PATTERN =
   `<input[^>]+type=["']?password|<title[^>]*>[^<]*(?:登录|登陆|login|身份认证)[^<]*</title>|id=["']?(?:unPassword|pwPassword|cptPassword|loginForm)`
 
-/** 校外模式默认配置：默认关闭，关掉时代码路径与校内直连完全一致。 */
+/** 校外模式默认配置：默认关闭；网关地址固定，用户只需开关与登录态 Cookie。 */
 const DEFAULT_WEBVPN = {
   enabled: false,
-  gateway: '',
+  gateway: WEBVPN_GATEWAY,
   rewriteTemplate: DEFAULT_REWRITE_TEMPLATE,
   cookie: '',
   loginPagePattern: DEFAULT_LOGIN_PAGE_PATTERN,
@@ -436,13 +439,14 @@ function ruleSummary({ title, content, tags, deadline, contact }) {
 /* 校外模式：URL 重写 / 还原（纯函数，互为逆运算，可单独断言）             */
 /* ------------------------------------------------------------------ */
 
-/** 只有「开关打开 + 填了网关地址」才算激活，避免只勾开关就发出畸形请求。 */
+/** 网关地址内置，只需开关打开即激活，无需任何配置。 */
 function isWebvpnEnabled(cfg) {
-  return Boolean(cfg && cfg.enabled === true && String(cfg.gateway || '').trim())
+  return Boolean(cfg && cfg.enabled === true)
 }
 
-function gatewayOf(cfg) {
-  return String(cfg?.gateway || '').trim().replace(/\/+$/, '')
+/** 网关地址固定内置：忽略配置里可能残留的旧值。 */
+function gatewayOf() {
+  return WEBVPN_GATEWAY.replace(/\/+$/, '')
 }
 
 /** 模板必须含且仅含一个 {url}，否则回退默认模板，保证还原规则能反推出来。 */
@@ -459,7 +463,7 @@ function restoreParts(cfg) {
   if (!isWebvpnEnabled(cfg)) return null
   const parts = templateOf(cfg).split('{url}')
   if (parts.length !== 2) return null
-  const gateway = gatewayOf(cfg)
+  const gateway = gatewayOf()
   return {
     prefix: parts[0].replace(/\{gateway\}/g, gateway),
     suffix: parts[1].replace(/\{gateway\}/g, gateway),
@@ -482,7 +486,7 @@ function decodePart(encoded) {
 function rewriteUrl(url, cfg) {
   if (!isWebvpnEnabled(cfg)) return url
   const value = String(url || '')
-  const gateway = gatewayOf(cfg)
+  const gateway = gatewayOf()
   if (!/^https?:\/\//i.test(value)) return value
   /* 网关回的 Location、已改写过的地址不再二次包裹 */
   if (value.toLowerCase().startsWith(gateway.toLowerCase())) return value
@@ -528,12 +532,11 @@ function restoreUrlsInText(text, cfg) {
 /** 门户正常业务响应里常见的数据容器：有非空值就说明不是过期页。 */
 const PORTAL_DATA_KEYS = ['d', 'data', 'items', 'list', 'rows', 'records', 'result', 'content']
 
-/** 网关 JSON 错误体里的登录 / 会话语义（可配置 loginPagePattern 之外的一层兜底）。 */
+/** 网关 JSON 错误体里的登录 / 会话语义（内置登录页特征之外的一层兜底）。 */
 const SESSION_WORDS = /请登录|未登录|登录超时|重新登录|session expired|login required|unauthorized|请先登录/i
 
 function matchesLoginPattern(text, cfg) {
-  const pattern = String(cfg?.loginPagePattern || '').trim()
-  if (!pattern) return false
+  const pattern = String(cfg?.loginPagePattern || DEFAULT_LOGIN_PAGE_PATTERN).trim()
   try {
     return new RegExp(pattern, 'i').test(text)
   } catch {
@@ -1003,6 +1006,7 @@ export {
   excerptOf,
   pickPath,
   parseJsonList,
+  WEBVPN_GATEWAY,
   DEFAULT_WEBVPN,
   DEFAULT_REWRITE_TEMPLATE,
   DEFAULT_LOGIN_PAGE_PATTERN,

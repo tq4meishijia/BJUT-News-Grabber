@@ -10,7 +10,7 @@
  * 验证码默认隐藏；真遇到验证码时返回明确原因，让用户手动更新登录态。
  */
 import { spawnSync } from 'node:child_process'
-import { fetchRaw, decodeBody, cleanText, restoreUrl } from './core.mjs'
+import { fetchRaw, decodeBody, cleanText, restoreUrl, WEBVPN_GATEWAY } from './core.mjs'
 
 function hostOf(value) {
   try {
@@ -54,9 +54,9 @@ async function jarRequest(url, { jar, method = 'GET', body, headers = {}, maxRed
   /* 网关自己那层会话 Cookie 由配置单独提供，不收进门户会话罐；
      用 hostname（不含端口）比对，Cookie 的 Domain 属性本来就不带端口 */
   let gatewayHost = ''
-  if (webvpn && webvpn.enabled && webvpn.gateway) {
+  if (webvpn && webvpn.enabled) {
     try {
-      gatewayHost = new URL(webvpn.gateway).hostname.toLowerCase()
+      gatewayHost = new URL(WEBVPN_GATEWAY).hostname.toLowerCase()
     } catch {
       gatewayHost = ''
     }
@@ -162,7 +162,7 @@ export async function casLogin({ casBase, service, username, password, signal, w
   if (!casBase || !service) {
     return { ok: false, reason: '还没配置「认证入口地址」和「登录后返回的地址」（设置页可以填）' }
   }
-  const vpn = webvpn && webvpn.enabled && webvpn.gateway ? webvpn : null
+  const vpn = webvpn && webvpn.enabled ? webvpn : null
   /* 走 WebVPN 时把所有地址统一还原成门户/CAS 原始地址：hostOf 与 portalCookies
      仍按门户域名判定，不会因为请求 host 变成网关而误报 NO_PORTAL_SESSION */
   const effectiveCasBase = vpn ? restoreUrl(casBase, vpn) : casBase

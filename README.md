@@ -99,41 +99,43 @@ node server.mjs --data D:\cn.json    # 换数据文件位置
 
 ### 怎么开
 
+本项目是 **BJUT 专用**：WebVPN 网关地址 `https://webvpn.bjut.edu.cn` 与地址重写规则都已内置，界面上不需要填写网关地址、重写模板或登录页特征。
+
 设置页 → **校外网络（WebVPN）**：
 
 1. 勾「开启校外模式」。
-2. 填「网关地址」：学校 WebVPN 的根地址，例如 `https://webvpn.example.edu.cn`。
-3. 确认「重写模板」符合你们学校网关的地址形态（见下）。
-4. 在浏览器里登录一次 WebVPN，F12 → Network → 复制整条 Cookie，粘到「网关会话 Cookie」，点「保存校外模式设置」。
-5. 点「立即抓取」。数据源里的 `url` / `pageUrl`（`{n}` 页码）/ `detailUrlTemplate`（`{id}` 详情 id）**保持校内原始地址，一处都不用改**——改写在请求层统一完成，翻页仍按 `p={n}` 翻满，详情仍按原模板跟进。
+2. 在浏览器里登录一次 WebVPN，F12 → Network → 复制整条 Cookie，粘到「网关会话 Cookie」，点「保存网关 Cookie」。
+3. 点「立即抓取」。数据源里的 `url` / `pageUrl`（`{n}` 页码）/ `detailUrlTemplate`（`{id}` 详情 id）**保持校内原始地址，一处都不用改**——改写在请求层统一完成，翻页仍按 `p={n}` 翻满，详情仍按原模板跟进。
+
+> 唯一的输入是网关会话 Cookie：它是会过期的登录凭据，不是配置项，所以不会内置。校内直连时开关保持关闭即可，什么都不用填。
 
 > **网关 Cookie 与门户 Cookie 分开**：门户登录态仍存在各数据源的「登录态 Cookie」里（或由自动登录写回）；网关那层单独存在 `store.json` 的 `settings.webvpn.cookie`，程序只在发请求时附加它，不会写进数据源、不会打印到日志。账号密码也仍按原来的方式存在 `config.json`。
 
-### 重写规则怎么按学校改
+### 内置的重写规则
 
-程序把每个**出站**地址先过一次 `rewriteUrl`，把响应文本里被网关改写过的链接再过 `restoreUrlsInText` 还原回门户原始地址，所以 `new URL` 拼相对链接、去重、详情跟进都仍按门户原始地址走。规则由两个配置项决定：
+程序把每个**出站**地址先过一次 `rewriteUrl`，把响应文本里被网关改写过的链接再过 `restoreUrlsInText` 还原回门户原始地址，所以 `new URL` 拼相对链接、去重、详情跟进都仍按门户原始地址走。网关地址与出站模板是 `core.mjs` 顶部的内置常量，不暴露为配置项：
 
-| 配置 | 说明 |
-| --- | --- |
-| `gateway` | 网关根地址，替换模板里的 `{gateway}` |
-| `rewriteTemplate` | 出站地址模板，必须含且仅含一个 `{url}`，该占位符会被替换成 `encodeURIComponent(门户原始网址)` |
+| 内置常量 | 值 | 说明 |
+| --- | --- | --- |
+| `WEBVPN_GATEWAY` | `https://webvpn.bjut.edu.cn` | BJUT WebVPN 网关根地址 |
+| `DEFAULT_REWRITE_TEMPLATE` | `{gateway}/proxy?url={url}` | 占位符 `{url}` 被替换成 `encodeURIComponent(门户原始网址)` |
 
-默认模板是 `{gateway}/proxy?url={url}`，例如：
+例如：
 
 ```
 https://my.bjut.edu.cn/site/get_news_list?category_id=1&p=1&size=32
-→ https://webvpn.example.edu.cn/proxy?url=https%3A%2F%2Fmy.bjut.edu.cn%2Fsite%2Fget_news_list%3Fcategory_id%3D1%26p%3D1%26size%3D32
+→ https://webvpn.bjut.edu.cn/proxy?url=https%3A%2F%2Fmy.bjut.edu.cn%2Fsite%2Fget_news_list%3Fcategory_id%3D1%26p%3D1%26size%3D32
 ```
 
-这只是一种常见、可逆的网关形态。你们学校的网关若把编码后的网址放在路径里（如 `{gateway}/https/{url}`）、用别的参数名或带固定后缀，照着把模板里的固定部分换掉即可，只要 `{url}` 出现一次。**还原规则由同一个模板自动推导，不需要配第二份规则**，因此对任意合法模板都满足 `restoreUrl(rewriteUrl(u)) === u`；模板不合法时回退到默认模板。响应文本里凡是按该模板生成的网关链接都会被还原成门户地址，通知链接照常可点。若网关在链接末尾追加了 `&token=…` 之类的附加 query 参数，还原时会连同这些参数一起去掉，不会在门户地址后留下尾巴。
+**还原规则由同一个模板自动推导，不需要配第二份规则**，因此满足 `restoreUrl(rewriteUrl(u)) === u`。响应文本里凡是按该模板生成的网关链接都会被还原成门户地址，通知链接照常可点。若网关在链接末尾追加了 `&token=…` 之类的附加 query 参数，还原时会连同这些参数一起去掉，不会在门户地址后留下尾巴。若 BJUT 网关的地址形态变化，改 `core.mjs` 这两个常量即可，界面与 `store.json` 都不用动。
 
 ### 会话过期怎么办
 
 WebVPN 会话过期时网关往往返回 **HTTP 200 + 登录页**，而不是明确的错误，容易被当成「今天没通知」。程序按响应结构识别，命中后给出明确提示：
 
-> WebVPN 网关会话已过期：返回的是登录页而不是通知内容。请在浏览器重新登录 WebVPN，把新的网关 Cookie 粘到「设置 → 校外模式」，再抓取一次
+> WebVPN 网关会话已过期：返回的是登录页而不是通知内容。请在浏览器重新登录 WebVPN，把新的网关 Cookie 粘到「设置 → 校外网络（WebVPN）」，再抓取一次
 
-- **非 JSON 响应**：用「登录页特征」（一段可配置正则）检测。默认值只认 `<input type=password>`、标题里的「登录 / login / 身份认证」等**通用结构**，不写死某校页面文案；你们学校的登录页长得不一样时，把它改成能命中的正则（例如 `id="loginForm"|统一身份认证`）。
+- **非 JSON 响应**：用内置的登录页特征正则检测。默认值只认 `<input type=password>`、标题里的「登录 / login / 身份认证」等**通用结构**，不写死某校页面文案；BJUT 登录页结构变化时改 `core.mjs` 的 `DEFAULT_LOGIN_PAGE_PATTERN` 即可。
 - **合法 JSON 响应**：先看有没有非空的业务数据容器（`d` / `data` / `items` / `list` / `rows` 等），有就一律当正常数据放行；没有再按登录/会话语义（`请登录` / `未登录` / `session expired` / `login required` / `unauthorized` 等，或 `code` / `e` / `status` 为 401/403/302 且带 `msg` / `message` / `m`）判定。门户自己的业务码（`e=10042` / `10041`）仍走原有的「登录态失效」提示。
 - **声称 JSON 却返回登录页 HTML**（`JSON.parse` 失败）：校外模式下同样抛上面那条明确提示，不会静默变成 0 条。
 
