@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CampusNotice.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:CampusNotice.Views"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    Title="校园通知 · 日程">
+
+    <!--
+      外壳结构（视觉规范 §7.1 / §7.2 / §7.9，UX 规范 §1.2）：
+        Mica 仅窗口根层（code-behind 设置 SystemBackdrop）；
+        NavigationView 窗格透明、Mica 透出；内容区铺不透明 LayerFillColorDefaultBrush。
+        内容区 Row0 标题 + 状态行 + 全局命令栏 / Row1 单一 InfoBar / Row2 2px 抓取进度 / Row3 四页。
+        四页实例只创建一次，用 Visibility 切换（不建返回栈、切页保留筛选与滚动位置）。
+        三档断点 ≥1008 Left(240) / 640–1007 LeftCompact(48) / <640 LeftMinimal。
+    -->
+    <Grid x:Name="RootGrid" Background="Transparent">
+
+        <NavigationView
+            x:Name="NavView"
+            PaneDisplayMode="Auto"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            OpenPaneLength="240"
+            CompactPaneLength="48"
+            SelectionChanged="NavView_SelectionChanged"
+            Loaded="NavView_Loaded">
+
+            <!-- 品牌头：用 FontIcon 代替位图，避免依赖未补齐的 .ico（见 Assets/README.md） -->
+            <NavigationView.PaneHeader>
+                <Grid Padding="12,16,12,12" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="24" Height="24" CornerRadius="4"
+                            Background="{ThemeResource BrandBlueBrush}">
+                        <FontIcon Glyph="{StaticResource IconRinger}" FontFamily="Segoe Fluent Icons"
+                                  FontSize="14" Foreground="White"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="校园通知 · 日程" FontSize="15" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="PaneStatus" Text="服务连接中 · 端口 8737"
+                                   Style="{StaticResource FontCaption}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+            </NavigationView.PaneHeader>
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="NavNotices" Tag="notices" Content="通知" AccessKey="1"
+                                    AutomationProperties.Name="通知页，快捷键 Alt 加 1">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{StaticResource IconRinger}" FontFamily="Segoe Fluent Icons"
+                                  FontSize="16" />
+                    </NavigationViewItem.Icon>
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge x:Name="BadgeNotices" Value="0" Visibility="Collapsed" />
+                    </NavigationViewItem.InfoBadge>
+                </NavigationViewItem>
+
+                <NavigationViewItem x:Name="NavSchedule" Tag="schedule" Content="日程" AccessKey="2"
+                                    AutomationProperties.Name="日程页，快捷键 Alt 加 2">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{StaticResource IconCalendar}" FontFamily="Segoe Fluent Icons"
+                                  FontSize="16" />
+                    </NavigationViewItem.Icon>
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge x:Name="BadgeSchedule" Value="0" Visibility="Collapsed" />
+                    </NavigationViewItem.InfoBadge>
+                </NavigationViewItem>
+
+                <NavigationViewItem x:Name="NavSources" Tag="sources" Content="数据源" AccessKey="3"
+                                    AutomationProperties.Name="数据源页，快捷键 Alt 加 3">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{StaticResource IconGlobe}" FontFamily="Segoe Fluent Icons"
+                                  FontSize="16" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <!-- 设置固定在 PaneFooter；12px 状态摘要只写服务/端口，零自启项 -->
+            <NavigationView.PaneFooter>
+                <StackPanel Padding="4,0,4,12">
+                    <TextBlock x:Name="PaneFooterStatus" Text="数据只存在这台电脑"
+                               Style="{StaticResource FontCaption}" Margin="12,0,12,8"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                    <NavigationViewItem x:Name="NavSettings" Tag="settings" Content="设置" AccessKey="4"
+                                        Tapped="NavSettings_Tapped"
+                                        AutomationProperties.Name="设置页，快捷键 Alt 加 4">
+                        <NavigationViewItem.Icon>
+                            <FontIcon Glyph="{StaticResource IconSetting}" FontFamily="Segoe Fluent Icons"
+                                      FontSize="16" />
+                        </NavigationViewItem.Icon>
+                    </NavigationViewItem>
+                </StackPanel>
+            </NavigationView.PaneFooter>
+
+            <!-- 内容区：不透明 Layer 1，隔开壁纸，保证文字可读 -->
+            <Grid x:Name="ContentLayer" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Row0 · 标题 + 状态行 + 全局命令栏 -->
+                <Grid Grid.Row="0" Padding="24,16,24,8" ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Name="PageTitle" Text="通知" Style="{StaticResource FontPageTitle}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock x:Name="StatusLine" Text="正在连接本地服务…"
+                                   Style="{StaticResource StatusLineStyle}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+
+                    <CommandBar x:Name="GlobalCommandBar" Grid.Column="1"
+                                DefaultLabelPosition="Right" Height="48"
+                                VerticalAlignment="Center"
+                                Background="Transparent">
+                        <CommandBar.PrimaryCommands>
+                            <AppBarButton x:Name="CmdPoll" Label="立即抓取" Icon="Refresh"
+                                          MinWidth="120" Click="CmdPoll_Click"
+                                          AutomationProperties.Name="立即抓取"
+                                          ToolTipService.ToolTip="立即抓取（F5 / Ctrl+R）" />
+                            <AppBarButton x:Name="CmdAddItem" Label="手动添加日程" Icon="Add"
+                                          Visibility="Collapsed" Click="CmdAddItem_Click"
+                                          AutomationProperties.Name="手动添加日程" />
+                            <AppBarToggleButton x:Name="CmdShowDone" Label="显示已完成" Icon="Accept"
+                                                Visibility="Collapsed" Click="CmdShowDone_Click"
+                                                AutomationProperties.Name="显示已完成" />
+                            <AppBarButton x:Name="CmdAddSource" Label="添加数据源" Icon="Add"
+                                          Visibility="Collapsed" Click="CmdAddSource_Click"
+                                          AutomationProperties.Name="添加数据源" />
+                        </CommandBar.PrimaryCommands>
+                        <CommandBar.SecondaryCommands>
+                            <AppBarButton x:Name="CmdEnableNotifications" Label="开启桌面通知"
+                                          Icon="Message" Click="CmdEnableNotifications_Click" />
+                            <AppBarButton x:Name="CmdTestToast" Label="测试桌面通知"
+                                          Icon="Play" Click="CmdTestToast_Click" />
+                            <AppBarSeparator />
+                            <AppBarButton x:Name="CmdRescore" Label="按关键词重算摘要"
+                                          Icon="Sync" Click="CmdRescore_Click" />
+                            <AppBarButton x:Name="CmdRefill" Label="补齐通知正文"
+                                          Icon="Download" Click="CmdRefill_Click" />
+                            <AppBarSeparator />
+                            <AppBarButton x:Name="CmdReloginAll" Label="全部重新登录"
+                                          Icon="Admin" Click="CmdReloginAll_Click" />
+                            <AppBarButton x:Name="CmdGoSettings" Label="去设置页"
+                                          Icon="Setting" Click="CmdGoSettings_Click" />
+                        </CommandBar.SecondaryCommands>
+                    </CommandBar>
+                </Grid>
+
+                <!-- Row1 · 全局唯一 InfoBar（Error > Warning > Informational > Success 择一） -->
+                <InfoBar x:Name="GlobalInfoBar" Grid.Row="1"
+                         Style="{StaticResource GlobalInfoBarStyle}"
+                         Margin="24,0,24,0"
+                         IsOpen="False" IsClosable="True"
+                         Closed="GlobalInfoBar_Closed"
+                         AutomationProperties.LiveSetting="Polite">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="InfoBarAction" Content="重试" Visibility="Collapsed"
+                                Click="InfoBarAction_Click" MinHeight="32" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
+                <!-- Row2 · 抓取中 2px 不确定进度条（与按钮内 ProgressRing 表达同一状态） -->
+                <ProgressBar x:Name="PollingBar" Grid.Row="2" Height="2"
+                             IsIndeterminate="True" Visibility="Collapsed"
+                             Foreground="{ThemeResource PollingBrush}"
+                             Margin="24,0,24,0" />
+
+                <!-- Row3 · 四页（只创建一次，Visibility 切换，无返回栈） -->
+                <Grid x:Name="PageHost" Grid.Row="3">
+                    <views:NoticesPage x:Name="NoticesPage" Visibility="Visible" />
+                    <views:SchedulePage x:Name="SchedulePage" Visibility="Collapsed" />
+                    <views:SourcesPage x:Name="SourcesPage" Visibility="Collapsed" />
+                    <views:SettingsPage x:Name="SettingsPage" Visibility="Collapsed" />
+                </Grid>
+
+                <!-- 后端启动中：内容区中央 32px ProgressRing，不用模态遮罩 -->
+                <Border x:Name="StartingOverlay" Grid.RowSpan="4"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        Visibility="Collapsed" IsHitTestVisible="True">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                        <ProgressRing Width="32" Height="32" IsActive="True"
+                                      Foreground="{ThemeResource BackendStartingBrush}" />
+                        <TextBlock Text="正在连接本地服务…" Style="{StaticResource FontBodyStrong}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="127.0.0.1:8737 · 数据只存在这台电脑"
+                                   Style="{StaticResource FontCaption}" HorizontalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!--
+                  组件 7.14「撤销条」（视觉规范 v1.1 §13.3 / UX §9.2）：
+                  **仅移除型延迟提交**（notice.remove / item.remove / notice.readAll 回滚）。
+                  内容区底部居中、最大宽 480、距底 24；不透明实色 + 1px 描边 + 圆角 8 + Z=0 无投影、
+                  不用 Acrylic；Delete 图标用中性色不用红；右侧仅「撤销」+ tabular 倒计时；
+                  底部 2px 确定性 ProgressBar；不夺焦点、独立于顶部 InfoBar（一上一下并存）。
+                  item.add / 手动新增**不**用本组件（走 Success InfoBar / 零提示）。
+                -->
+                <Border x:Name="UndoBar" Grid.Row="0" Grid.RowSpan="4"
+                        Style="{StaticResource CardBorderStyle}"
+                        MaxWidth="480" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Margin="0,0,0,24" Padding="12,10,12,10"
+                        Visibility="Collapsed"
+                        AutomationProperties.Name="已移除 1 项，8 秒内可撤销">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE74D;" FontFamily="Segoe Fluent Icons"
+                                      FontSize="16" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource NeutralForegroundBrush}" />
+                            <TextBlock x:Name="UndoLabel" Grid.Column="1" Text="已移除 1 项"
+                                       Style="{StaticResource FontBody}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <TextBlock x:Name="UndoCountdown" Grid.Column="2" Text="8s"
+                                       Style="{StaticResource FontCaption}" MinWidth="26"
+                                       TextAlignment="Right" VerticalAlignment="Center" />
+                            <Button x:Name="UndoButton" Grid.Column="3" Content="撤销"
+                                    MinHeight="32" MinWidth="64" Click="UndoButton_Click"
+                                    AutomationProperties.Name="撤销移除" />
+                        </Grid>
+                        <ProgressBar x:Name="UndoProgress" Height="2" Minimum="0" Maximum="8" Value="8"
+                                     Foreground="{ThemeResource NeutralFillBrush}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </NavigationView>
+
+        <!-- 全局唯一 TeachingTip：撤销提示、首次运行 3 步串行引导、关闭到托盘提示 -->
+        <TeachingTip x:Name="GlobalTip"
+                     IsLightDismissEnabled="False"
+                     PreferredPlacement="Bottom"
+                     CornerRadius="8"
+                     ActionButtonClick="GlobalTip_Action"
+                     CloseButtonClick="GlobalTip_Close"
+                     Closed="GlobalTip_Closed" />
+    </Grid>
+</Window>

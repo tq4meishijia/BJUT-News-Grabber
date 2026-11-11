@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    校园通知 · 日程 —— WinUI 3 原生桌面客户端（unpackaged）。
+
+    目标框架与包版本说明见 docs/winui3-build-and-run.md：
+      * net8.0-windows10.0.19041.0  → 需要「.NET 桌面开发」+「Windows 应用 SDK」工作负载
+      * Microsoft.WindowsAppSDK 版本如与本机 VS 中安装的不一致，请按实际版本调整，
+        本项目使用的 API 面要求 >= 1.5（MicaBackdrop / SelectorBar / AppNotificationManager），
+        推荐 1.6。Microsoft.Windows.SDK.BuildTools 由 WindowsAppSDK 传递引用，通常无需显式声明。
+      * WindowsPackageType=None → 免打包（unpackaged）运行；改 MSIX 打包见构建文档。
+      * 不设置 ApplicationIcon / 不引用任何 Assets 二进制图标，避免缺少 .ico 时编译失败；
+        图标补齐步骤见 winui3/CampusNotice/Assets/README.md 与构建文档。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>CampusNotice</RootNamespace>
+    <AssemblyName>CampusNotice</AssemblyName>
+    <DefaultLanguage>zh-CN</DefaultLanguage>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableDefaultPageItems>true</EnableDefaultPageItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.240923002" />
+  </ItemGroup>
+
+  <!--
+    Assets/README.md 与 Package.appxmanifest 由 SDK 默认 None glob 自动包含，
+    这里不再显式 <None Include>，避免 NETSDK1022「Duplicate 'None' items」。
+    MSIX 打包时 VS 会自行识别 Package.appxmanifest。
+  -->
+
+</Project>

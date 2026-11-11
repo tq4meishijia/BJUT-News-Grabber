@@ -26,11 +26,13 @@ const PUBLIC_DIR = join(HERE, 'public')
 /* ------------------------------ 参数与配置 ------------------------------ */
 
 function parseArgs(argv) {
-  const args = { open: true, port: null, data: null }
+  const args = { open: true, port: null, data: null, noToast: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--no-open') args.open = false
     else if (arg === '--open') args.open = true
+    /* WinUI 3 客户端托管时用 --no-toast：提醒仍写入 meta.reminders，系统 Toast 由客户端 AppNotification 单一通道发送 */
+    else if (arg === '--no-toast') args.noToast = true
     else if (arg === '--port') args.port = Number(argv[++index])
     else if (arg.startsWith('--port=')) args.port = Number(arg.slice(7))
     else if (arg === '--data') args.data = argv[++index]
@@ -93,6 +95,12 @@ const service = await new CampusService({
   log: (...parts) => console.log('[campus-notice]', ...parts),
   onConfigUpdate: (next) => saveConfig(next),
   onNotify: (title, body) => {
+    /* --no-toast：客户端托管时后端只记日志并返回 true，不调用 toast()，避免与客户端 AppNotification 双发。
+       不带该参数时行为与原来完全一致（start.cmd / 现有 Web 版零影响）。 */
+    if (args.noToast) {
+      console.log('[campus-notice] 已交给客户端系统通知（--no-toast）：', title, body)
+      return true
+    }
     toast(title, body)
     return true
   },

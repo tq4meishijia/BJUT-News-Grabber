@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Colors.xaml —— 视觉规范 §10.1 颜色 Token 汇总表，逐键抄录。
+  * Light / Dark：C 层（品牌 / 语义）确定 HEX，唯一允许出现裸 HEX 的文件。
+  * HighContrast：C 层全部改映射系统 SystemColor*，禁用自定义 HEX（§9.2）。
+  * A 层中性色与 B 层强调色不在此定义：组件直接引用系统 ThemeResource
+    （CardBackgroundFillColorDefaultBrush / TextFillColorPrimaryBrush / AccentFillColorDefaultBrush …）。
+  * 所有别名必须同时出现在 Light / Dark / HighContrast 三个分支中。
+  * ScoreXxxFillBrush / ForegroundBrush / SubtleBrush 三元组供 Helpers/ScorePalette.cs 按档位取色。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <!-- ============================== Light ============================== -->
+    <ResourceDictionary x:Key="Light">
+
+      <!-- 品牌 -->
+      <SolidColorBrush x:Key="BrandBlueBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="BrandBlueHoverBrush" Color="#4A80FF" />
+      <SolidColorBrush x:Key="BrandBluePressedBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="BrandBlueForegroundBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="BrandBlueSubtleBrush" Color="#E8F0FF" />
+
+      <!-- 语义基色：Fill 画图形 / Foreground 写文字 / Subtle 做淡底 -->
+      <SolidColorBrush x:Key="CriticalFillBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="CriticalForegroundBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="CriticalSubtleBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="WarningFillBrush" Color="#B9761A" />
+      <SolidColorBrush x:Key="WarningForegroundBrush" Color="#8A5300" />
+      <SolidColorBrush x:Key="WarningSubtleBrush" Color="#FBF0DD" />
+      <SolidColorBrush x:Key="SuccessFillBrush" Color="#1A9C5B" />
+      <SolidColorBrush x:Key="SuccessForegroundBrush" Color="#0E7A42" />
+      <SolidColorBrush x:Key="SuccessSubtleBrush" Color="#E6F6EC" />
+      <SolidColorBrush x:Key="InfoFillBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="InfoForegroundBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="InfoSubtleBrush" Color="#E8F0FF" />
+      <SolidColorBrush x:Key="NeutralFillBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="NeutralForegroundBrush" Color="#667085" />
+      <SolidColorBrush x:Key="NeutralSubtleBrush" Color="#F0F2F5" />
+
+      <!-- 重要度四档（阈值 70 / 50 / 35；「重要」筛选 = score >= 50） -->
+      <SolidColorBrush x:Key="ScoreCriticalBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="ScoreHighBrush" Color="#B9761A" />
+      <SolidColorBrush x:Key="ScoreMediumBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="ScoreLowBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="ScoreNoneBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="ScoreCriticalFillBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="ScoreCriticalForegroundBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="ScoreCriticalSubtleBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="ScoreHighFillBrush" Color="#B9761A" />
+      <SolidColorBrush x:Key="ScoreHighForegroundBrush" Color="#8A5300" />
+      <SolidColorBrush x:Key="ScoreHighSubtleBrush" Color="#FBF0DD" />
+      <SolidColorBrush x:Key="ScoreMediumFillBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="ScoreMediumForegroundBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="ScoreMediumSubtleBrush" Color="#E8F0FF" />
+      <SolidColorBrush x:Key="ScoreLowFillBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="ScoreLowForegroundBrush" Color="#667085" />
+      <SolidColorBrush x:Key="ScoreLowSubtleBrush" Color="#F0F2F5" />
+      <SolidColorBrush x:Key="ScoreNoneFillBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="ScoreNoneForegroundBrush" Color="#667085" />
+      <SolidColorBrush x:Key="ScoreNoneSubtleBrush" Color="#F0F2F5" />
+
+      <!-- 截止 / 临期 -->
+      <SolidColorBrush x:Key="DeadlineOverdueBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="DeadlineTodayBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="DeadlineSoonBrush" Color="#B9761A" />
+      <SolidColorBrush x:Key="DeadlineWeekBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="DeadlineFarBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="DeadlineNoneBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="DeadlineOverdueSubtleBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="DeadlineSoonSubtleBrush" Color="#FBF0DD" />
+      <SolidColorBrush x:Key="DeadlineWeekSubtleBrush" Color="#E8F0FF" />
+      <SolidColorBrush x:Key="DeadlineFarSubtleBrush" Color="#F0F2F5" />
+
+      <!-- 日程分组头 -->
+      <SolidColorBrush x:Key="GroupOverdueBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="GroupTodayBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="GroupTomorrowBrush" Color="#8A5300" />
+      <SolidColorBrush x:Key="GroupWeekBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="GroupFarBrush" Color="#667085" />
+      <SolidColorBrush x:Key="GroupDoneBrush" Color="#0E7A42" />
+
+      <!-- 数据源健康（loginExpired 恒为 Warning 橙，D2） -->
+      <SolidColorBrush x:Key="SourceStatusOkBrush" Color="#1A9C5B" />
+      <SolidColorBrush x:Key="SourceStatusErrorBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="SourceStatusIdleBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="SourceLoginExpiredBrush" Color="#B9761A" />
+      <SolidColorBrush x:Key="SourceCookieOkBrush" Color="#1A9C5B" />
+      <SolidColorBrush x:Key="SourceDisabledBrush" Color="#8A94A6" />
+      <SolidColorBrush x:Key="SourceStatusOkSubtleBrush" Color="#E6F6EC" />
+      <SolidColorBrush x:Key="SourceStatusErrorSubtleBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="SourceStatusIdleSubtleBrush" Color="#F0F2F5" />
+      <SolidColorBrush x:Key="SourceLoginExpiredSubtleBrush" Color="#FBF0DD" />
+      <SolidColorBrush x:Key="SourceCookieOkSubtleBrush" Color="#E6F6EC" />
+
+      <!-- 全局状态 -->
+      <SolidColorBrush x:Key="BackendStartingBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="PollingBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="NetworkErrorBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="FirstRunBrush" Color="#2B6CFF" />
+      <SolidColorBrush x:Key="InfoBarInfoBrush" Color="#1B4FD0" />
+      <SolidColorBrush x:Key="InfoBarSuccessBrush" Color="#0E7A42" />
+      <SolidColorBrush x:Key="InfoBarWarningBrush" Color="#8A5300" />
+      <SolidColorBrush x:Key="InfoBarErrorBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="InfoBarInfoSubtleBrush" Color="#E8F0FF" />
+      <SolidColorBrush x:Key="InfoBarSuccessSubtleBrush" Color="#E6F6EC" />
+      <SolidColorBrush x:Key="InfoBarWarningSubtleBrush" Color="#FBF0DD" />
+      <SolidColorBrush x:Key="InfoBarErrorSubtleBrush" Color="#FDE7E9" />
+
+      <!-- 通知 / 日程 / 徽标 -->
+      <SolidColorBrush x:Key="NoticeUnreadStripBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="NoticeReadTitleBrush" Color="#191C20" />
+      <SolidColorBrush x:Key="NoticeCardBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="NoticeCardHoverBrush" Color="#FAFAFA" />
+      <SolidColorBrush x:Key="NoticeMetaBrush" Color="#667085" />
+      <SolidColorBrush x:Key="NoticeBadgeBackgroundBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="NoticeBodyPanelBrush" Color="#F0F2F5" />
+      <SolidColorBrush x:Key="RemindChipBrush" Color="#F0F2F5" />
+      <SolidColorBrush x:Key="ScoreBadgeBackgroundBrush" Color="#FDE7E9" />
+      <SolidColorBrush x:Key="ScoreBadgeForegroundBrush" Color="#B10E1C" />
+      <SolidColorBrush x:Key="ScoreDotBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="ScoreAccentStripBrush" Color="#D13438" />
+      <SolidColorBrush x:Key="ItemDoneBrush" Color="#0E7A42" />
+    </ResourceDictionary>
+
+    <!-- ============================== Dark ============================== -->
+    <ResourceDictionary x:Key="Dark">
+
+      <SolidColorBrush x:Key="BrandBlueBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="BrandBlueHoverBrush" Color="#7BA3FF" />
+      <SolidColorBrush x:Key="BrandBluePressedBrush" Color="#3F6FE0" />
+      <SolidColorBrush x:Key="BrandBlueForegroundBrush" Color="#8FB0FF" />
+      <SolidColorBrush x:Key="BrandBlueSubtleBrush" Color="#1C2740" />
+
+      <SolidColorBrush x:Key="CriticalFillBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="CriticalForegroundBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="CriticalSubtleBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="WarningFillBrush" Color="#F5B544" />
+      <SolidColorBrush x:Key="WarningForegroundBrush" Color="#F7C565" />
+      <SolidColorBrush x:Key="WarningSubtleBrush" Color="#3A2C12" />
+      <SolidColorBrush x:Key="SuccessFillBrush" Color="#3DDC97" />
+      <SolidColorBrush x:Key="SuccessForegroundBrush" Color="#6CE5B1" />
+      <SolidColorBrush x:Key="SuccessSubtleBrush" Color="#12301F" />
+      <SolidColorBrush x:Key="InfoFillBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="InfoForegroundBrush" Color="#8FB0FF" />
+      <SolidColorBrush x:Key="InfoSubtleBrush" Color="#1C2740" />
+      <SolidColorBrush x:Key="NeutralFillBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="NeutralForegroundBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="NeutralSubtleBrush" Color="#232830" />
+
+      <SolidColorBrush x:Key="ScoreCriticalBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="ScoreHighBrush" Color="#F5B544" />
+      <SolidColorBrush x:Key="ScoreMediumBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="ScoreLowBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreNoneBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreCriticalFillBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="ScoreCriticalForegroundBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="ScoreCriticalSubtleBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="ScoreHighFillBrush" Color="#F5B544" />
+      <SolidColorBrush x:Key="ScoreHighForegroundBrush" Color="#F7C565" />
+      <SolidColorBrush x:Key="ScoreHighSubtleBrush" Color="#3A2C12" />
+      <SolidColorBrush x:Key="ScoreMediumFillBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="ScoreMediumForegroundBrush" Color="#8FB0FF" />
+      <SolidColorBrush x:Key="ScoreMediumSubtleBrush" Color="#1C2740" />
+      <SolidColorBrush x:Key="ScoreLowFillBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreLowForegroundBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreLowSubtleBrush" Color="#232830" />
+      <SolidColorBrush x:Key="ScoreNoneFillBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreNoneForegroundBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="ScoreNoneSubtleBrush" Color="#232830" />
+
+      <SolidColorBrush x:Key="DeadlineOverdueBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="DeadlineTodayBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="DeadlineSoonBrush" Color="#F5B544" />
+      <SolidColorBrush x:Key="DeadlineWeekBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="DeadlineFarBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="DeadlineNoneBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="DeadlineOverdueSubtleBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="DeadlineSoonSubtleBrush" Color="#3A2C12" />
+      <SolidColorBrush x:Key="DeadlineWeekSubtleBrush" Color="#1C2740" />
+      <SolidColorBrush x:Key="DeadlineFarSubtleBrush" Color="#232830" />
+
+      <SolidColorBrush x:Key="GroupOverdueBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="GroupTodayBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="GroupTomorrowBrush" Color="#F7C565" />
+      <SolidColorBrush x:Key="GroupWeekBrush" Color="#8FB0FF" />
+      <SolidColorBrush x:Key="GroupFarBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="GroupDoneBrush" Color="#6CE5B1" />
+
+      <SolidColorBrush x:Key="SourceStatusOkBrush" Color="#3DDC97" />
+      <SolidColorBrush x:Key="SourceStatusErrorBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="SourceStatusIdleBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="SourceLoginExpiredBrush" Color="#F5B544" />
+      <SolidColorBrush x:Key="SourceCookieOkBrush" Color="#3DDC97" />
+      <SolidColorBrush x:Key="SourceDisabledBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="SourceStatusOkSubtleBrush" Color="#12301F" />
+      <SolidColorBrush x:Key="SourceStatusErrorSubtleBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="SourceStatusIdleSubtleBrush" Color="#232830" />
+      <SolidColorBrush x:Key="SourceLoginExpiredSubtleBrush" Color="#3A2C12" />
+      <SolidColorBrush x:Key="SourceCookieOkSubtleBrush" Color="#12301F" />
+
+      <SolidColorBrush x:Key="BackendStartingBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="PollingBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="NetworkErrorBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="FirstRunBrush" Color="#5B8CFF" />
+      <SolidColorBrush x:Key="InfoBarInfoBrush" Color="#8FB0FF" />
+      <SolidColorBrush x:Key="InfoBarSuccessBrush" Color="#6CE5B1" />
+      <SolidColorBrush x:Key="InfoBarWarningBrush" Color="#F7C565" />
+      <SolidColorBrush x:Key="InfoBarErrorBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="InfoBarInfoSubtleBrush" Color="#1C2740" />
+      <SolidColorBrush x:Key="InfoBarSuccessSubtleBrush" Color="#12301F" />
+      <SolidColorBrush x:Key="InfoBarWarningSubtleBrush" Color="#3A2C12" />
+      <SolidColorBrush x:Key="InfoBarErrorSubtleBrush" Color="#3B2024" />
+
+      <SolidColorBrush x:Key="NoticeUnreadStripBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="NoticeReadTitleBrush" Color="#E9ECF1" />
+      <SolidColorBrush x:Key="NoticeCardBrush" Color="#272727" />
+      <SolidColorBrush x:Key="NoticeCardHoverBrush" Color="#2E2E2E" />
+      <SolidColorBrush x:Key="NoticeMetaBrush" Color="#98A2B3" />
+      <SolidColorBrush x:Key="NoticeBadgeBackgroundBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="NoticeBodyPanelBrush" Color="#232830" />
+      <SolidColorBrush x:Key="RemindChipBrush" Color="#232830" />
+      <SolidColorBrush x:Key="ScoreBadgeBackgroundBrush" Color="#3B2024" />
+      <SolidColorBrush x:Key="ScoreBadgeForegroundBrush" Color="#FF99A4" />
+      <SolidColorBrush x:Key="ScoreDotBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="ScoreAccentStripBrush" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="ItemDoneBrush" Color="#6CE5B1" />
+    </ResourceDictionary>
+
+    <!-- =========================== HighContrast ===========================
+         §9.2：C 层所有语义别名映射系统 SystemColor*；禁用自定义 HEX。
+         高对比度下颜色可能被系统完全覆盖，形状 + 文字 + AutomationProperties.Name 是保底。
+         显式关闭 Mica/Acrylic 在 MainWindow.ApplyBackdrop() 中处理。
+    -->
+    <ResourceDictionary x:Key="HighContrast">
+      <StaticResource x:Key="BrandBlueBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="BrandBlueHoverBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="BrandBluePressedBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="BrandBlueForegroundBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="BrandBlueSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="CriticalFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="CriticalForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="CriticalSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="WarningFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="WarningForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="WarningSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="SuccessFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SuccessForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SuccessSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="InfoFillBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="InfoForegroundBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="InfoSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="NeutralFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="NeutralForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="NeutralSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="ScoreCriticalBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreHighBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreMediumBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="ScoreLowBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreNoneBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreCriticalFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreCriticalForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreCriticalSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreHighFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreHighForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreHighSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreMediumFillBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="ScoreMediumForegroundBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="ScoreMediumSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreLowFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreLowForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreLowSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreNoneFillBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreNoneForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreNoneSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="DeadlineOverdueBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="DeadlineTodayBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="DeadlineSoonBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="DeadlineWeekBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="DeadlineFarBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="DeadlineNoneBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="DeadlineOverdueSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="DeadlineSoonSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="DeadlineWeekSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="DeadlineFarSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="GroupOverdueBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="GroupTodayBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="GroupTomorrowBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="GroupWeekBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="GroupFarBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="GroupDoneBrush" ResourceKey="SystemColorWindowTextBrush" />
+
+      <StaticResource x:Key="SourceStatusOkBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceStatusErrorBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceStatusIdleBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceLoginExpiredBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceCookieOkBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceDisabledBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="SourceStatusOkSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="SourceStatusErrorSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="SourceStatusIdleSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="SourceLoginExpiredSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="SourceCookieOkSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="BackendStartingBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="PollingBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="NetworkErrorBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="FirstRunBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="InfoBarInfoBrush" ResourceKey="SystemColorHighlightBrush" />
+      <StaticResource x:Key="InfoBarSuccessBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="InfoBarWarningBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="InfoBarErrorBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="InfoBarInfoSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="InfoBarSuccessSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="InfoBarWarningSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="InfoBarErrorSubtleBrush" ResourceKey="SystemColorWindowBrush" />
+
+      <StaticResource x:Key="NoticeUnreadStripBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="NoticeReadTitleBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="NoticeCardBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="NoticeCardHoverBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="NoticeMetaBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="NoticeBadgeBackgroundBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="NoticeBodyPanelBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="RemindChipBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreBadgeBackgroundBrush" ResourceKey="SystemColorWindowBrush" />
+      <StaticResource x:Key="ScoreBadgeForegroundBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreDotBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ScoreAccentStripBrush" ResourceKey="SystemColorWindowTextBrush" />
+      <StaticResource x:Key="ItemDoneBrush" ResourceKey="SystemColorWindowTextBrush" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>
