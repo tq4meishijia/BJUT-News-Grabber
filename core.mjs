@@ -82,6 +82,26 @@ const DEFAULT_SOURCES = [
   },
 ]
 
+/* ------------------------------------------------------------------ */
+/* 校外模式（WebVPN）：出站地址统一重写，响应里的链接统一还原             */
+/* ------------------------------------------------------------------ */
+
+/** 默认重写模板：一种常见网关形态——把门户原始网址整条编码进网关的 url 参数。 */
+const DEFAULT_REWRITE_TEMPLATE = '{gateway}/proxy?url={url}'
+
+/** 默认「网关会话过期」登录页特征：只认通用登录页结构，不写死某校文案。 */
+const DEFAULT_LOGIN_PAGE_PATTERN =
+  `<input[^>]+type=["']?password|<title[^>]*>[^<]*(?:登录|登陆|login|身份认证)[^<]*</title>|id=["']?(?:unPassword|pwPassword|cptPassword|loginForm)`
+
+/** 校外模式默认配置：默认关闭，关掉时代码路径与校内直连完全一致。 */
+const DEFAULT_WEBVPN = {
+  enabled: false,
+  gateway: '',
+  rewriteTemplate: DEFAULT_REWRITE_TEMPLATE,
+  cookie: '',
+  loginPagePattern: DEFAULT_LOGIN_PAGE_PATTERN,
+}
+
 function emptyStore(config) {
   return {
     version: 1,
@@ -100,6 +120,7 @@ function emptyStore(config) {
       fetchDetail: config?.fetchDetail !== false,
       detailLimit: numberOr(config?.detailLimit, 25, 5, 60),
       notify: true,
+      webvpn: { ...DEFAULT_WEBVPN },
     },
     sources: DEFAULT_SOURCES.map((s) => ({
       enabled: false,
@@ -412,6 +433,170 @@ function ruleSummary({ title, content, tags, deadline, contact }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 校外模式：URL 重写 / 还原（纯函数，互为逆运算，可单独断言）             */
+/* ------------------------------------------------------------------ */
+
+/** 只有「开关打开 + 填了网关地址」才算激活，避免只勾开关就发出畸形请求。 */
+function isWebvpnEnabled(cfg) {
+  return Boolean(cfg && cfg.enabled === true && String(cfg.gateway || '').trim())
+}
+
+function gatewayOf(cfg) {
+  return String(cfg?.gateway || '').trim().replace(/\/+$/, '')
+}
+
+/** 模板必须含且仅含一个 {url}，否则回退默认模板，保证还原规则能反推出来。 */
+function templateOf(cfg) {
+  const value = String(cfg?.rewriteTemplate || '').trim()
+  return value && value.split('{url}').length === 2 ? value : DEFAULT_REWRITE_TEMPLATE
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function restoreParts(cfg) {
+  if (!isWebvpnEnabled(cfg)) return null
+  const parts = templateOf(cfg).split('{url}')
+  if (parts.length !== 2) return null
+  const gateway = gatewayOf(cfg)
+  return {
+    prefix: parts[0].replace(/\{gateway\}/g, gateway),
+    suffix: parts[1].replace(/\{gateway\}/g, gateway),
+  }
+}
+
+function decodePart(encoded) {
+  try {
+    const value = decodeURIComponent(encoded)
+    return /^https?:\/\//i.test(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 出站重写：门户原始网址 → 网关地址。
+ * 关闭（或已经是网关地址）时原样返回，直连路径逐字节不变。
+ */
+function rewriteUrl(url, cfg) {
+  if (!isWebvpnEnabled(cfg)) return url
+  const value = String(url || '')
+  const gateway = gatewayOf(cfg)
+  if (!/^https?:\/\//i.test(value)) return value
+  /* 网关回的 Location、已改写过的地址不再二次包裹 */
+  if (value.toLowerCase().startsWith(gateway.toLowerCase())) return value
+  return templateOf(cfg)
+    .replace(/\{gateway\}/g, gateway)
+    .replace('{url}', encodeURIComponent(value))
+}
+
+/** 网关可能在编码后的 url 参数后追加自己的 query 参数（&token=…&x=…），还原时一并去掉。 */
+const EXTRA_QUERY = `(?:&[^"'<>\\s&=]+(?:=[^"'<>\\s&]*)?)*`
+
+/** 还原单个地址：网关地址 → 门户原始网址（与 rewriteUrl 互为逆运算）。 */
+function restoreUrl(url, cfg) {
+  if (!isWebvpnEnabled(cfg)) return url
+  const parts = restoreParts(cfg)
+  if (!parts) return url
+  const pattern = new RegExp(
+    `^${escapeRegExp(parts.prefix)}([^"'<>\\s&]+)${escapeRegExp(parts.suffix)}${EXTRA_QUERY}$`,
+  )
+  const hit = pattern.exec(String(url || ''))
+  return hit ? (decodePart(hit[1]) ?? url) : url
+}
+
+/**
+ * 还原响应文本里被网关改写过的链接，让 new URL / 去重 / 详情跟进
+ * 仍按门户原始地址走。未启用时直接返回原参数。
+ */
+function restoreUrlsInText(text, cfg) {
+  if (!isWebvpnEnabled(cfg)) return text
+  const parts = restoreParts(cfg)
+  if (!parts) return text
+  const source = String(text ?? '')
+  if (!source) return source
+  const pattern = new RegExp(
+    `${escapeRegExp(parts.prefix)}([^"'<>\\s&]+)${escapeRegExp(parts.suffix)}${EXTRA_QUERY}`,
+    'g',
+  )
+  return source.replace(pattern, (all, encoded) => decodePart(encoded) ?? all)
+}
+
+/* ---------------------- 网关会话过期的响应识别 ---------------------- */
+
+/** 门户正常业务响应里常见的数据容器：有非空值就说明不是过期页。 */
+const PORTAL_DATA_KEYS = ['d', 'data', 'items', 'list', 'rows', 'records', 'result', 'content']
+
+/** 网关 JSON 错误体里的登录 / 会话语义（可配置 loginPagePattern 之外的一层兜底）。 */
+const SESSION_WORDS = /请登录|未登录|登录超时|重新登录|session expired|login required|unauthorized|请先登录/i
+
+function matchesLoginPattern(text, cfg) {
+  const pattern = String(cfg?.loginPagePattern || '').trim()
+  if (!pattern) return false
+  try {
+    return new RegExp(pattern, 'i').test(text)
+  } catch {
+    return false
+  }
+}
+
+/** 含非空业务数据容器的 JSON 一律当正常数据，绝不当成过期页。 */
+function hasPortalData(value) {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.length > 0
+  for (const key of PORTAL_DATA_KEYS) {
+    const nested = value[key]
+    if (Array.isArray(nested) && nested.length) return true
+    if (nested && typeof nested === 'object' && Object.keys(nested).length) return true
+  }
+  return false
+}
+
+/** 已排除正常业务数据的 JSON：按登录语义或 401/403/302 + 消息判定。 */
+function jsonSessionExpired(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const texts = []
+  let flaggedCode = false
+  let hasMessage = false
+  for (const [key, val] of Object.entries(value)) {
+    const lower = key.toLowerCase()
+    if (lower === 'msg' || lower === 'message' || lower === 'm') hasMessage = true
+    if (/^(?:code|e|status)$/i.test(key) && [401, 403, 302].includes(Number(val))) flaggedCode = true
+    if (typeof val === 'string' || typeof val === 'number') texts.push(String(val))
+    else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      for (const inner of Object.values(val)) {
+        if (typeof inner === 'string' || typeof inner === 'number') texts.push(String(inner))
+      }
+    }
+  }
+  return SESSION_WORDS.test(texts.join(' ')) || Boolean(flaggedCode && hasMessage)
+}
+
+/**
+ * 网关会话过期常返回 200 + 登录页（HTML），也可能声称 JSON 却回登录页或 JSON 错误体。
+ * 对所有 content-type 生效，但用结构特征避免误伤正常业务 JSON。
+ */
+function webvpnSessionExpired(text, cfg) {
+  if (!isWebvpnEnabled(cfg)) return false
+  const raw = String(text ?? '')
+  if (!raw) return false
+  let parsed = null
+  let isJson = true
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    isJson = false
+  }
+  if (!isJson) return matchesLoginPattern(raw, cfg)
+  /* 正常业务 JSON 与门户自己的业务码（e=10042/10041）交给原有分支，不抢判 */
+  if (hasPortalData(parsed)) return false
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+      [10041, 10042].includes(Number(parsed.e))) return false
+  return matchesLoginPattern(raw, cfg) || jsonSessionExpired(parsed)
+}
+
+/* ------------------------------------------------------------------ */
 /* 网络：支持 DNS 覆盖（校内/WebVPN 域名常常公网解析不到）                  */
 /* ------------------------------------------------------------------ */
 
@@ -453,9 +638,12 @@ function decompress(buffer, encoding) {
 
 function fetchRaw(url, options = {}, redirects = 0) {
   return new Promise((resolve, reject) => {
+    const vpn = isWebvpnEnabled(options.webvpn) ? options.webvpn : null
+    /* 出站地址统一先过重写；网关地址（如重定向目标）不再二次包裹 */
+    const outgoing = vpn ? rewriteUrl(url, vpn) : url
     let target
     try {
-      target = new URL(url)
+      target = new URL(outgoing)
     } catch {
       reject(new Error(`网址不合法：${url}`))
       return
@@ -474,6 +662,11 @@ function fetchRaw(url, options = {}, redirects = 0) {
       ...(options.headers || {}),
     }
     if (options.cookie) headers.cookie = options.cookie
+    /* 网关自己那层会话 Cookie 单独附加，不混进数据源的门户 Cookie */
+    if (vpn && vpn.cookie) {
+      const base = String(headers.cookie || '').trim()
+      headers.cookie = [base, String(vpn.cookie).trim()].filter(Boolean).join('; ')
+    }
     const payload = options.body === undefined || options.body === null ? '' : String(options.body)
     if (payload && !headers['content-length']) {
       headers['content-length'] = Buffer.byteLength(payload)
@@ -498,7 +691,9 @@ function fetchRaw(url, options = {}, redirects = 0) {
       const location = res.headers.location
       if (!options.noFollow && status >= 300 && status < 400 && location && redirects < 4) {
         res.resume()
-        const next = new URL(location, target).href
+        let next = new URL(location, target).href
+        /* 网关回的 Location 也是改写过的，先还原成门户原始地址再跟下一跳 */
+        if (vpn) next = restoreUrl(next, vpn)
         fetchRaw(next, options, redirects + 1).then(resolve, reject)
         return
       }
@@ -515,7 +710,7 @@ function fetchRaw(url, options = {}, redirects = 0) {
       res.on('end', () => {
         resolve({
           status,
-          url: target.href,
+          url: vpn ? restoreUrl(target.href, vpn) : target.href,
           headers: res.headers,
           body: decompress(Buffer.concat(chunks), res.headers['content-encoding']),
         })
@@ -808,4 +1003,12 @@ export {
   excerptOf,
   pickPath,
   parseJsonList,
+  DEFAULT_WEBVPN,
+  DEFAULT_REWRITE_TEMPLATE,
+  DEFAULT_LOGIN_PAGE_PATTERN,
+  isWebvpnEnabled,
+  rewriteUrl,
+  restoreUrl,
+  restoreUrlsInText,
+  webvpnSessionExpired,
 }
