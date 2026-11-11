@@ -107,27 +107,35 @@ node server.mjs --data D:\cn.json    # 换数据文件位置
 2. 在浏览器里登录一次 WebVPN，F12 → Network → 复制整条 Cookie，粘到「网关会话 Cookie」，点「保存网关 Cookie」。
 3. 点「立即抓取」。数据源里的 `url` / `pageUrl`（`{n}` 页码）/ `detailUrlTemplate`（`{id}` 详情 id）**保持校内原始地址，一处都不用改**——改写在请求层统一完成，翻页仍按 `p={n}` 翻满，详情仍按原模板跟进。
 
-> 唯一的输入是网关会话 Cookie：它是会过期的登录凭据，不是配置项，所以不会内置。校内直连时开关保持关闭即可，什么都不用填。
+> 配置层面唯一的输入是网关会话 Cookie：它是会过期的登录凭据，不是配置项，所以不会内置。校内直连时开关保持关闭即可，什么都不用填。
+
+> **门户登录态是另一套**：`my.bjut.edu.cn` 的通知接口要求门户自身已登录。若抓取提示「登录态失效（接口返回「请登录」）」，在浏览器里经 WebVPN 打开并登录一站式平台，再从 F12 → Network 中 `get_news_list` 请求的 `Cookie` 头复制完整内容，填到数据源的「登录态 Cookie」（程序会把它与网关 Cookie 合并后一起发送）。也可以在设置页填账号密码走统一身份认证自动登录。
 
 > **网关 Cookie 与门户 Cookie 分开**：门户登录态仍存在各数据源的「登录态 Cookie」里（或由自动登录写回）；网关那层单独存在 `store.json` 的 `settings.webvpn.cookie`，程序只在发请求时附加它，不会写进数据源、不会打印到日志。账号密码也仍按原来的方式存在 `config.json`。
 
 ### 内置的重写规则
 
-程序把每个**出站**地址先过一次 `rewriteUrl`，把响应文本里被网关改写过的链接再过 `restoreUrlsInText` 还原回门户原始地址，所以 `new URL` 拼相对链接、去重、详情跟进都仍按门户原始地址走。网关地址与出站模板是 `core.mjs` 顶部的内置常量，不暴露为配置项：
+BJUT 用的是 Wengine（网瑞达）网关，出站地址不是普通代理参数，而是把**主机名加密**后放进路径：
+
+```
+https://<网关>/<协议>/<IV十六进制><主机名AES密文十六进制><原始路径与查询>
+```
+
+程序把每个**出站**地址先过一次 `rewriteUrl`，把响应文本里被网关改写过的链接再过 `restoreUrlsInText` 还原回门户原始地址，所以 `new URL` 拼相对链接、去重、详情跟进都仍按门户原始地址走。规则全部内置在 `core.mjs`，不暴露为配置项：
 
 | 内置常量 | 值 | 说明 |
 | --- | --- | --- |
 | `WEBVPN_GATEWAY` | `https://webvpn.bjut.edu.cn` | BJUT WebVPN 网关根地址 |
-| `DEFAULT_REWRITE_TEMPLATE` | `{gateway}/proxy?url={url}` | 占位符 `{url}` 被替换成 `encodeURIComponent(门户原始网址)` |
+| `WENGINE_KEY` | `wrdvpnisthebest!` | Wengine 公开默认密钥兼 IV，用于 AES-128-CFB 加密主机名 |
 
-例如：
+实测样例（已用真实网关凭据验证）：
 
 ```
 https://my.bjut.edu.cn/site/get_news_list?category_id=1&p=1&size=32
-→ https://webvpn.bjut.edu.cn/proxy?url=https%3A%2F%2Fmy.bjut.edu.cn%2Fsite%2Fget_news_list%3Fcategory_id%3D1%26p%3D1%26size%3D32
+→ https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421fdee0f9e2d257c1e7b0c9ce29b5b/site/get_news_list?category_id=1&p=1&size=32
 ```
 
-**还原规则由同一个模板自动推导，不需要配第二份规则**，因此满足 `restoreUrl(rewriteUrl(u)) === u`。响应文本里凡是按该模板生成的网关链接都会被还原成门户地址，通知链接照常可点。若网关在链接末尾追加了 `&token=…` 之类的附加 query 参数，还原时会连同这些参数一起去掉，不会在门户地址后留下尾巴。若 BJUT 网关的地址形态变化，改 `core.mjs` 这两个常量即可，界面与 `store.json` 都不用动。
+**还原规则由同一套编解码互推**：从网关路径里解出主机名再拼回原始地址，满足 `restoreUrl(rewriteUrl(u)) === u`。响应里被网关改写成绝对地址或 `/https/<编码>/…` 相对路径的链接都会被还原，通知链接照常可点。编解码用 Node 内置 `node:crypto`，不引入任何依赖。若网关算法或地址变化，改 `core.mjs` 这两个常量即可，界面与 `store.json` 都不用动。
 
 ### 会话过期怎么办
 

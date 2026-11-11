@@ -3,7 +3,7 @@
  * 抓取（支持 DNS 覆盖 / gzip / GBK）、三种列表解析、正文定位、截止时间与联系人抽取、打分、规则摘要。
  * 不依赖任何第三方包，也不碰文件系统 —— 便于单独测试。
  */
-import { createHash } from 'node:crypto'
+import { createHash, createCipheriv, createDecipheriv } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
 import dns from 'node:dns'
@@ -89,8 +89,8 @@ const DEFAULT_SOURCES = [
 /** BJUT 专用：WebVPN 网关内置，界面与配置里都不需要填地址。换网关改这一行。 */
 const WEBVPN_GATEWAY = 'https://webvpn.bjut.edu.cn'
 
-/** 默认重写模板：把门户原始网址整条编码进网关的 url 参数。 */
-const DEFAULT_REWRITE_TEMPLATE = '{gateway}/proxy?url={url}'
+/** Wengine 网关用固定密钥/IV 对主机名做 AES-128-CFB，IV 明文拼在密文前。 */
+const WENGINE_KEY = 'wrdvpnisthebest!'
 
 /** 默认「网关会话过期」登录页特征：只认通用登录页结构，不写死某校文案。 */
 const DEFAULT_LOGIN_PAGE_PATTERN =
@@ -100,7 +100,6 @@ const DEFAULT_LOGIN_PAGE_PATTERN =
 const DEFAULT_WEBVPN = {
   enabled: false,
   gateway: WEBVPN_GATEWAY,
-  rewriteTemplate: DEFAULT_REWRITE_TEMPLATE,
   cookie: '',
   loginPagePattern: DEFAULT_LOGIN_PAGE_PATTERN,
 }
@@ -449,38 +448,58 @@ function gatewayOf() {
   return WEBVPN_GATEWAY.replace(/\/+$/, '')
 }
 
-/** 模板必须含且仅含一个 {url}，否则回退默认模板，保证还原规则能反推出来。 */
-function templateOf(cfg) {
-  const value = String(cfg?.rewriteTemplate || '').trim()
-  return value && value.split('{url}').length === 2 ? value : DEFAULT_REWRITE_TEMPLATE
-}
-
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function restoreParts(cfg) {
-  if (!isWebvpnEnabled(cfg)) return null
-  const parts = templateOf(cfg).split('{url}')
-  if (parts.length !== 2) return null
-  const gateway = gatewayOf()
-  return {
-    prefix: parts[0].replace(/\{gateway\}/g, gateway),
-    suffix: parts[1].replace(/\{gateway\}/g, gateway),
+/* Wengine 主机名编解码：IV 十六进制 + AES-128-CFB 密文（只取主机名长度）的十六进制。
+   算法已用公开样例 www.baidu.com 与 BJUT 真实网关响应双向核对。 */
+const WENGINE_GATEWAY_HOST = new URL(WEBVPN_GATEWAY).host
+
+function encodeWengineHost(host) {
+  const key = Buffer.from(WENGINE_KEY, 'utf8')
+  const plain = Buffer.from(host, 'utf8')
+  const cipher = createCipheriv('aes-128-cfb', key, key)
+  const secret = Buffer.concat([cipher.update(plain), cipher.final()])
+  return key.toString('hex') + secret.subarray(0, plain.length).toString('hex')
+}
+
+function decodeWengineHost(hex) {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 34 || hex.length % 2) return ''
+  try {
+    const key = Buffer.from(hex.slice(0, 32), 'hex')
+    if (key.length !== 16) return ''
+    const secret = Buffer.from(hex.slice(32), 'hex')
+    const decipher = createDecipheriv('aes-128-cfb', key, key)
+    return Buffer.concat([decipher.update(secret), decipher.final()]).toString('utf8')
+  } catch {
+    return ''
   }
 }
 
-function decodePart(encoded) {
-  try {
-    const value = decodeURIComponent(encoded)
-    return /^https?:\/\//i.test(value) ? value : null
-  } catch {
-    return null
-  }
+/** 网关改写后的地址可能是绝对网址，也可能是 /https/<编码>/… 形式的相对路径。 */
+function wenginePattern(anchored) {
+  const source =
+    (anchored ? '^' : '') +
+    '(?:https?://' + escapeRegExp(WENGINE_GATEWAY_HOST) + ')?' +
+    '/(https?(?:-\\d+)?)/([0-9a-fA-F]{34,})' +
+    '(/[^"\'<>\\s]*)?' +
+    (anchored ? '$' : '')
+  return new RegExp(source, anchored ? 'i' : 'gi')
+}
+const WENGINE_ABS = wenginePattern(true)
+const WENGINE_ALL = wenginePattern(false)
+
+function restoreWengineMatch(all, scheme, hex, path) {
+  const host = decodeWengineHost(hex)
+  if (!host) return all
+  const port = /-(\d+)$/.exec(scheme)
+  const protocol = scheme.startsWith('https') ? 'https' : 'http'
+  return protocol + '://' + host + (port ? ':' + port[1] : '') + (path || '/')
 }
 
 /**
- * 出站重写：门户原始网址 → 网关地址。
+ * 出站重写：门户原始网址 → Wengine 网关地址。
  * 关闭（或已经是网关地址）时原样返回，直连路径逐字节不变。
  */
 function rewriteUrl(url, cfg) {
@@ -490,24 +509,25 @@ function rewriteUrl(url, cfg) {
   if (!/^https?:\/\//i.test(value)) return value
   /* 网关回的 Location、已改写过的地址不再二次包裹 */
   if (value.toLowerCase().startsWith(gateway.toLowerCase())) return value
-  return templateOf(cfg)
-    .replace(/\{gateway\}/g, gateway)
-    .replace('{url}', encodeURIComponent(value))
+  let target
+  try {
+    target = new URL(value)
+  } catch {
+    return value
+  }
+  const protocol = target.protocol.slice(0, -1)
+  const nonStandardPort = target.port &&
+    !((protocol === 'https' && target.port === '443') || (protocol === 'http' && target.port === '80'))
+  const scheme = protocol + (nonStandardPort ? '-' + target.port : '')
+  return gateway + '/' + scheme + '/' + encodeWengineHost(target.hostname) + target.pathname + target.search
 }
-
-/** 网关可能在编码后的 url 参数后追加自己的 query 参数（&token=…&x=…），还原时一并去掉。 */
-const EXTRA_QUERY = `(?:&[^"'<>\\s&=]+(?:=[^"'<>\\s&]*)?)*`
 
 /** 还原单个地址：网关地址 → 门户原始网址（与 rewriteUrl 互为逆运算）。 */
 function restoreUrl(url, cfg) {
   if (!isWebvpnEnabled(cfg)) return url
-  const parts = restoreParts(cfg)
-  if (!parts) return url
-  const pattern = new RegExp(
-    `^${escapeRegExp(parts.prefix)}([^"'<>\\s&]+)${escapeRegExp(parts.suffix)}${EXTRA_QUERY}$`,
-  )
-  const hit = pattern.exec(String(url || ''))
-  return hit ? (decodePart(hit[1]) ?? url) : url
+  const value = String(url || '')
+  const hit = WENGINE_ABS.exec(value)
+  return hit ? restoreWengineMatch(hit[0], hit[1], hit[2], hit[3]) : value
 }
 
 /**
@@ -516,15 +536,9 @@ function restoreUrl(url, cfg) {
  */
 function restoreUrlsInText(text, cfg) {
   if (!isWebvpnEnabled(cfg)) return text
-  const parts = restoreParts(cfg)
-  if (!parts) return text
   const source = String(text ?? '')
   if (!source) return source
-  const pattern = new RegExp(
-    `${escapeRegExp(parts.prefix)}([^"'<>\\s&]+)${escapeRegExp(parts.suffix)}${EXTRA_QUERY}`,
-    'g',
-  )
-  return source.replace(pattern, (all, encoded) => decodePart(encoded) ?? all)
+  return source.replace(WENGINE_ALL, restoreWengineMatch)
 }
 
 /* ---------------------- 网关会话过期的响应识别 ---------------------- */
@@ -1008,7 +1022,6 @@ export {
   parseJsonList,
   WEBVPN_GATEWAY,
   DEFAULT_WEBVPN,
-  DEFAULT_REWRITE_TEMPLATE,
   DEFAULT_LOGIN_PAGE_PATTERN,
   isWebvpnEnabled,
   rewriteUrl,
