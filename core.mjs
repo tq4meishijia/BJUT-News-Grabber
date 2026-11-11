@@ -3,7 +3,7 @@
  * 抓取（支持 DNS 覆盖 / gzip / GBK）、三种列表解析、正文定位、截止时间与联系人抽取、打分、规则摘要。
  * 不依赖任何第三方包，也不碰文件系统 —— 便于单独测试。
  */
-import { createHash } from 'node:crypto'
+import { createHash, createCipheriv, createDecipheriv } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
 import dns from 'node:dns'
@@ -82,6 +82,28 @@ const DEFAULT_SOURCES = [
   },
 ]
 
+/* ------------------------------------------------------------------ */
+/* 校外模式（WebVPN）：出站地址统一重写，响应里的链接统一还原             */
+/* ------------------------------------------------------------------ */
+
+/** BJUT 专用：WebVPN 网关内置，界面与配置里都不需要填地址。换网关改这一行。 */
+const WEBVPN_GATEWAY = 'https://webvpn.bjut.edu.cn'
+
+/** Wengine 网关用固定密钥/IV 对主机名做 AES-128-CFB，IV 明文拼在密文前。 */
+const WENGINE_KEY = 'wrdvpnisthebest!'
+
+/** 默认「网关会话过期」登录页特征：只认通用登录页结构，不写死某校文案。 */
+const DEFAULT_LOGIN_PAGE_PATTERN =
+  `<input[^>]+type=["']?password|<title[^>]*>[^<]*(?:登录|登陆|login|身份认证)[^<]*</title>|id=["']?(?:unPassword|pwPassword|cptPassword|loginForm)`
+
+/** 校外模式默认配置：默认关闭；网关地址固定，用户只需开关与登录态 Cookie。 */
+const DEFAULT_WEBVPN = {
+  enabled: false,
+  gateway: WEBVPN_GATEWAY,
+  cookie: '',
+  loginPagePattern: DEFAULT_LOGIN_PAGE_PATTERN,
+}
+
 function emptyStore(config) {
   return {
     version: 1,
@@ -100,6 +122,7 @@ function emptyStore(config) {
       fetchDetail: config?.fetchDetail !== false,
       detailLimit: numberOr(config?.detailLimit, 25, 5, 60),
       notify: true,
+      webvpn: { ...DEFAULT_WEBVPN },
     },
     sources: DEFAULT_SOURCES.map((s) => ({
       enabled: false,
@@ -412,6 +435,185 @@ function ruleSummary({ title, content, tags, deadline, contact }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 校外模式：URL 重写 / 还原（纯函数，互为逆运算，可单独断言）             */
+/* ------------------------------------------------------------------ */
+
+/** 网关地址内置，只需开关打开即激活，无需任何配置。 */
+function isWebvpnEnabled(cfg) {
+  return Boolean(cfg && cfg.enabled === true)
+}
+
+/** 网关地址固定内置：忽略配置里可能残留的旧值。 */
+function gatewayOf() {
+  return WEBVPN_GATEWAY.replace(/\/+$/, '')
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/* Wengine 主机名编解码：IV 十六进制 + AES-128-CFB 密文（只取主机名长度）的十六进制。
+   算法已用公开样例 www.baidu.com 与 BJUT 真实网关响应双向核对。 */
+const WENGINE_GATEWAY_HOST = new URL(WEBVPN_GATEWAY).host
+
+function encodeWengineHost(host) {
+  const key = Buffer.from(WENGINE_KEY, 'utf8')
+  const plain = Buffer.from(host, 'utf8')
+  const cipher = createCipheriv('aes-128-cfb', key, key)
+  const secret = Buffer.concat([cipher.update(plain), cipher.final()])
+  return key.toString('hex') + secret.subarray(0, plain.length).toString('hex')
+}
+
+function decodeWengineHost(hex) {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 34 || hex.length % 2) return ''
+  try {
+    const key = Buffer.from(hex.slice(0, 32), 'hex')
+    if (key.length !== 16) return ''
+    const secret = Buffer.from(hex.slice(32), 'hex')
+    const decipher = createDecipheriv('aes-128-cfb', key, key)
+    return Buffer.concat([decipher.update(secret), decipher.final()]).toString('utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** 网关改写后的地址可能是绝对网址，也可能是 /https/<编码>/… 形式的相对路径。 */
+function wenginePattern(anchored) {
+  const source =
+    (anchored ? '^' : '') +
+    '(?:https?://' + escapeRegExp(WENGINE_GATEWAY_HOST) + ')?' +
+    '/(https?(?:-\\d+)?)/([0-9a-fA-F]{34,})' +
+    '(/[^"\'<>\\s]*)?' +
+    (anchored ? '$' : '')
+  return new RegExp(source, anchored ? 'i' : 'gi')
+}
+const WENGINE_ABS = wenginePattern(true)
+const WENGINE_ALL = wenginePattern(false)
+
+function restoreWengineMatch(all, scheme, hex, path) {
+  const host = decodeWengineHost(hex)
+  if (!host) return all
+  const port = /-(\d+)$/.exec(scheme)
+  const protocol = scheme.startsWith('https') ? 'https' : 'http'
+  return protocol + '://' + host + (port ? ':' + port[1] : '') + (path || '/')
+}
+
+/**
+ * 出站重写：门户原始网址 → Wengine 网关地址。
+ * 关闭（或已经是网关地址）时原样返回，直连路径逐字节不变。
+ */
+function rewriteUrl(url, cfg) {
+  if (!isWebvpnEnabled(cfg)) return url
+  const value = String(url || '')
+  const gateway = gatewayOf()
+  if (!/^https?:\/\//i.test(value)) return value
+  /* 网关回的 Location、已改写过的地址不再二次包裹 */
+  if (value.toLowerCase().startsWith(gateway.toLowerCase())) return value
+  let target
+  try {
+    target = new URL(value)
+  } catch {
+    return value
+  }
+  const protocol = target.protocol.slice(0, -1)
+  const nonStandardPort = target.port &&
+    !((protocol === 'https' && target.port === '443') || (protocol === 'http' && target.port === '80'))
+  const scheme = protocol + (nonStandardPort ? '-' + target.port : '')
+  return gateway + '/' + scheme + '/' + encodeWengineHost(target.hostname) + target.pathname + target.search
+}
+
+/** 还原单个地址：网关地址 → 门户原始网址（与 rewriteUrl 互为逆运算）。 */
+function restoreUrl(url, cfg) {
+  if (!isWebvpnEnabled(cfg)) return url
+  const value = String(url || '')
+  const hit = WENGINE_ABS.exec(value)
+  return hit ? restoreWengineMatch(hit[0], hit[1], hit[2], hit[3]) : value
+}
+
+/**
+ * 还原响应文本里被网关改写过的链接，让 new URL / 去重 / 详情跟进
+ * 仍按门户原始地址走。未启用时直接返回原参数。
+ */
+function restoreUrlsInText(text, cfg) {
+  if (!isWebvpnEnabled(cfg)) return text
+  const source = String(text ?? '')
+  if (!source) return source
+  return source.replace(WENGINE_ALL, restoreWengineMatch)
+}
+
+/* ---------------------- 网关会话过期的响应识别 ---------------------- */
+
+/** 门户正常业务响应里常见的数据容器：有非空值就说明不是过期页。 */
+const PORTAL_DATA_KEYS = ['d', 'data', 'items', 'list', 'rows', 'records', 'result', 'content']
+
+/** 网关 JSON 错误体里的登录 / 会话语义（内置登录页特征之外的一层兜底）。 */
+const SESSION_WORDS = /请登录|未登录|登录超时|重新登录|session expired|login required|unauthorized|请先登录/i
+
+function matchesLoginPattern(text, cfg) {
+  const pattern = String(cfg?.loginPagePattern || DEFAULT_LOGIN_PAGE_PATTERN).trim()
+  try {
+    return new RegExp(pattern, 'i').test(text)
+  } catch {
+    return false
+  }
+}
+
+/** 含非空业务数据容器的 JSON 一律当正常数据，绝不当成过期页。 */
+function hasPortalData(value) {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.length > 0
+  for (const key of PORTAL_DATA_KEYS) {
+    const nested = value[key]
+    if (Array.isArray(nested) && nested.length) return true
+    if (nested && typeof nested === 'object' && Object.keys(nested).length) return true
+  }
+  return false
+}
+
+/** 已排除正常业务数据的 JSON：按登录语义或 401/403/302 + 消息判定。 */
+function jsonSessionExpired(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const texts = []
+  let flaggedCode = false
+  let hasMessage = false
+  for (const [key, val] of Object.entries(value)) {
+    const lower = key.toLowerCase()
+    if (lower === 'msg' || lower === 'message' || lower === 'm') hasMessage = true
+    if (/^(?:code|e|status)$/i.test(key) && [401, 403, 302].includes(Number(val))) flaggedCode = true
+    if (typeof val === 'string' || typeof val === 'number') texts.push(String(val))
+    else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      for (const inner of Object.values(val)) {
+        if (typeof inner === 'string' || typeof inner === 'number') texts.push(String(inner))
+      }
+    }
+  }
+  return SESSION_WORDS.test(texts.join(' ')) || Boolean(flaggedCode && hasMessage)
+}
+
+/**
+ * 网关会话过期常返回 200 + 登录页（HTML），也可能声称 JSON 却回登录页或 JSON 错误体。
+ * 对所有 content-type 生效，但用结构特征避免误伤正常业务 JSON。
+ */
+function webvpnSessionExpired(text, cfg) {
+  if (!isWebvpnEnabled(cfg)) return false
+  const raw = String(text ?? '')
+  if (!raw) return false
+  let parsed = null
+  let isJson = true
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    isJson = false
+  }
+  if (!isJson) return matchesLoginPattern(raw, cfg)
+  /* 正常业务 JSON 与门户自己的业务码（e=10042/10041）交给原有分支，不抢判 */
+  if (hasPortalData(parsed)) return false
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+      [10041, 10042].includes(Number(parsed.e))) return false
+  return matchesLoginPattern(raw, cfg) || jsonSessionExpired(parsed)
+}
+
+/* ------------------------------------------------------------------ */
 /* 网络：支持 DNS 覆盖（校内/WebVPN 域名常常公网解析不到）                  */
 /* ------------------------------------------------------------------ */
 
@@ -453,9 +655,12 @@ function decompress(buffer, encoding) {
 
 function fetchRaw(url, options = {}, redirects = 0) {
   return new Promise((resolve, reject) => {
+    const vpn = isWebvpnEnabled(options.webvpn) ? options.webvpn : null
+    /* 出站地址统一先过重写；网关地址（如重定向目标）不再二次包裹 */
+    const outgoing = vpn ? rewriteUrl(url, vpn) : url
     let target
     try {
-      target = new URL(url)
+      target = new URL(outgoing)
     } catch {
       reject(new Error(`网址不合法：${url}`))
       return
@@ -474,6 +679,11 @@ function fetchRaw(url, options = {}, redirects = 0) {
       ...(options.headers || {}),
     }
     if (options.cookie) headers.cookie = options.cookie
+    /* 网关自己那层会话 Cookie 单独附加，不混进数据源的门户 Cookie */
+    if (vpn && vpn.cookie) {
+      const base = String(headers.cookie || '').trim()
+      headers.cookie = [base, String(vpn.cookie).trim()].filter(Boolean).join('; ')
+    }
     const payload = options.body === undefined || options.body === null ? '' : String(options.body)
     if (payload && !headers['content-length']) {
       headers['content-length'] = Buffer.byteLength(payload)
@@ -498,7 +708,9 @@ function fetchRaw(url, options = {}, redirects = 0) {
       const location = res.headers.location
       if (!options.noFollow && status >= 300 && status < 400 && location && redirects < 4) {
         res.resume()
-        const next = new URL(location, target).href
+        let next = new URL(location, target).href
+        /* 网关回的 Location 也是改写过的，先还原成门户原始地址再跟下一跳 */
+        if (vpn) next = restoreUrl(next, vpn)
         fetchRaw(next, options, redirects + 1).then(resolve, reject)
         return
       }
@@ -515,7 +727,7 @@ function fetchRaw(url, options = {}, redirects = 0) {
       res.on('end', () => {
         resolve({
           status,
-          url: target.href,
+          url: vpn ? restoreUrl(target.href, vpn) : target.href,
           headers: res.headers,
           body: decompress(Buffer.concat(chunks), res.headers['content-encoding']),
         })
@@ -808,4 +1020,12 @@ export {
   excerptOf,
   pickPath,
   parseJsonList,
+  WEBVPN_GATEWAY,
+  DEFAULT_WEBVPN,
+  DEFAULT_LOGIN_PAGE_PATTERN,
+  isWebvpnEnabled,
+  rewriteUrl,
+  restoreUrl,
+  restoreUrlsInText,
+  webvpnSessionExpired,
 }

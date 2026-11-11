@@ -10,7 +10,7 @@
  * 验证码默认隐藏；真遇到验证码时返回明确原因，让用户手动更新登录态。
  */
 import { spawnSync } from 'node:child_process'
-import { fetchRaw, decodeBody, cleanText } from './core.mjs'
+import { fetchRaw, decodeBody, cleanText, restoreUrl, WEBVPN_GATEWAY } from './core.mjs'
 
 function hostOf(value) {
   try {
@@ -47,10 +47,20 @@ function jarToHeader(jar) {
 }
 
 /** 自带 Cookie 罐、自己跟随重定向的请求。 */
-async function jarRequest(url, { jar, method = 'GET', body, headers = {}, maxRedirects = 8, onSetCookie }) {
+async function jarRequest(url, { jar, method = 'GET', body, headers = {}, maxRedirects = 8, onSetCookie, webvpn = null }) {
   let current = url
   let currentMethod = method
   let currentBody = body
+  /* 网关自己那层会话 Cookie 由配置单独提供，不收进门户会话罐；
+     用 hostname（不含端口）比对，Cookie 的 Domain 属性本来就不带端口 */
+  let gatewayHost = ''
+  if (webvpn && webvpn.enabled) {
+    try {
+      gatewayHost = new URL(WEBVPN_GATEWAY).hostname.toLowerCase()
+    } catch {
+      gatewayHost = ''
+    }
+  }
   for (let hop = 0; hop <= maxRedirects; hop += 1) {
     const cookie = jarToHeader(jar)
     const response = await fetchRaw(current, {
@@ -58,6 +68,7 @@ async function jarRequest(url, { jar, method = 'GET', body, headers = {}, maxRed
       body: currentBody,
       noFollow: true,
       timeoutMs: 20_000,
+      webvpn,
       headers: {
         cookie,
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
@@ -66,12 +77,24 @@ async function jarRequest(url, { jar, method = 'GET', body, headers = {}, maxRed
         ...headers,
       },
     })
-    const pairs = parseSetCookie(response.headers)
+    const pairs = parseSetCookie(response.headers).filter((pair) => {
+      /* 关闭 WebVPN 时保持原行为：所有 Cookie 照旧进罐 */
+      if (!gatewayHost) return true
+      const domain = String(pair.domain || '').toLowerCase()
+      /* 无 Domain 的是 host-only Cookie，WebVPN 下实际连接主机是网关，归属网关而非门户；
+         带网关 Domain 的同样过滤。只有带门户 Domain 的才证明门户会话真的建立了。 */
+      if (!domain) return false
+      return !(domain === gatewayHost || domain.endsWith(`.${gatewayHost}`))
+    })
     for (const pair of pairs) jar.set(pair.name, pair.value)
+    /* current 始终是还原后的门户/CAS 原始地址，与过滤后剩下的门户 Cookie 归属一致 */
     if (onSetCookie && pairs.length) onSetCookie(hostOf(current), pairs)
     const location = response.headers.location
     if (response.status >= 300 && response.status < 400 && location) {
-      current = new URL(location, current).href
+      let next = new URL(location, current).href
+      /* 网关回的 Location 是改写过的，还原成门户/CAS 原始地址，下一跳再统一重写出站 */
+      if (webvpn) next = restoreUrl(next, webvpn)
+      current = next
       currentMethod = 'GET'
       currentBody = undefined
       continue
@@ -134,16 +157,21 @@ function extractError(html) {
  * @param {{casBase: string, service: string, username: string, password: string, signal?: AbortSignal}} input
  * @returns {Promise<{ok: true, cookie: string, cookies: Record<string,string>} | {ok: false, reason: string}>}
  */
-export async function casLogin({ casBase, service, username, password, signal }) {
+export async function casLogin({ casBase, service, username, password, signal, webvpn = null }) {
   if (!username || !password) return { ok: false, reason: '账号或密码为空' }
   if (!casBase || !service) {
     return { ok: false, reason: '还没配置「认证入口地址」和「登录后返回的地址」（设置页可以填）' }
   }
-  const casHost = hostOf(casBase)
-  const portalHost = hostOf(service)
+  const vpn = webvpn && webvpn.enabled ? webvpn : null
+  /* 走 WebVPN 时把所有地址统一还原成门户/CAS 原始地址：hostOf 与 portalCookies
+     仍按门户域名判定，不会因为请求 host 变成网关而误报 NO_PORTAL_SESSION */
+  const effectiveCasBase = vpn ? restoreUrl(casBase, vpn) : casBase
+  const effectiveService = vpn ? restoreUrl(service, vpn) : service
+  const casHost = hostOf(effectiveCasBase)
+  const portalHost = hostOf(effectiveService)
   if (!casHost || !portalHost) return { ok: false, reason: '认证入口或返回地址不是合法网址' }
   const jar = new Map()
-  const loginUrl = `${casBase.replace(/\/+$/, '')}/login?service=${encodeURIComponent(service)}`
+  const loginUrl = `${effectiveCasBase.replace(/\/+$/, '')}/login?service=${encodeURIComponent(effectiveService)}`
   /* 记录门户域名下发过哪些 Cookie：没有就说明会话没真正建立 */
   const portalCookies = new Set()
   const onSetCookie = (host, pairs) => {
@@ -158,7 +186,7 @@ export async function casLogin({ casBase, service, username, password, signal })
     }
   }
   try {
-    const page = await jarRequest(loginUrl, { jar, onSetCookie })
+    const page = await jarRequest(loginUrl, { jar, onSetCookie, webvpn: vpn })
     let html = decodeBody(page.body, page.headers)
     let execution = extractExecution(html)
     const hasPortalSession = () => portalCookies.size > 0
@@ -175,7 +203,7 @@ export async function casLogin({ casBase, service, username, password, signal })
 
     /* 有些 CAS 先给一个「正在跳转/已登录」的中间页，再取一次就能拿到真正的表单 */
     if (!execution) {
-      const again = await jarRequest(loginUrl, { jar, onSetCookie })
+      const again = await jarRequest(loginUrl, { jar, onSetCookie, webvpn: vpn })
       const againHtml = decodeBody(again.body, again.headers)
       const againExecution = extractExecution(againHtml)
       if (!againExecution && (looksLoggedIn(html) || looksLoggedIn(againHtml) || hostOf(again.url) !== casHost)) {
@@ -216,12 +244,13 @@ export async function casLogin({ casBase, service, username, password, signal })
     const posted = await jarRequest(loginUrl, {
       jar,
       onSetCookie,
+      webvpn: vpn,
       method: 'POST',
       body: form,
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         referer: loginUrl,
-        origin: new URL(casBase).origin,
+        origin: new URL(effectiveCasBase).origin,
       },
     })
     const postedHtml = decodeBody(posted.body, posted.headers)

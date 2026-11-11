@@ -532,6 +532,7 @@ function viewSettings() {
       accountService: (state.meta?.account?.service || '').toString(),
       accountUser: (state.meta?.account?.username || '').toString(),
       accountPassword: '',
+      webvpnCookie: '',
     }
   }
   const draft = drafts.settings
@@ -554,6 +555,21 @@ function viewSettings() {
       <label class="switch"><input type="checkbox" data-act="toggle-autoschedule" ${state.settings.autoSchedule ? 'checked' : ''} />通知里识别到截止时间时，自动建成日程</label>
       <label class="switch"><input type="checkbox" data-act="toggle-detail" ${state.settings.fetchDetail ? 'checked' : ''} />跟进详情页正文（更准，但每次多几个请求）</label>
       <label class="switch"><input type="checkbox" data-act="toggle-notify" ${state.settings.notify !== false ? 'checked' : ''} />到点弹桌面通知（Windows 系统通知）</label>
+    </div>
+
+    <div class="section-title">校外网络（WebVPN）</div>
+    <div class="card">
+      <label class="switch"><input type="checkbox" data-act="toggle-webvpn" ${state.settings.webvpn?.enabled ? 'checked' : ''} />开启校外模式：列表、翻页、详情全部走学校 WebVPN</label>
+      <div class="hint">
+        BJUT 专用：网关地址已内置为 <code>${esc(state.settings.webvpn?.gateway || '')}</code>，地址重写规则也已内置，<b>无需填写任何配置</b>。
+        校外直连不到校内门户时打开本开关。开启后程序把每个出站地址改写成网关地址，响应里被网关改写过的链接再还原成门户原始地址，
+        所以数据源里的 <code>url</code> / <code>pageUrl</code> / <code>detailUrlTemplate</code> <b>保持校内原始地址，不用手改</b>。关掉开关后与校内直连完全一致。
+      </div>
+      <label class="field"><span>网关会话 Cookie${state.settings.webvpn?.hasCookie ? '（已保存，留空不修改）' : ''}</span><textarea data-scope="settings" data-field="webvpnCookie" placeholder="浏览器登录 WebVPN 后，从 F12 → Network 复制整条 Cookie">${esc(draft.webvpnCookie)}</textarea></label>
+      <div class="actions">
+        <button class="btn ghost" data-act="webvpn-clear-cookie">清除网关 Cookie</button>
+        <button class="btn primary" data-act="webvpn-save">保存网关 Cookie</button>
+      </div>
     </div>
 
     <div class="section-title">自动登录（统一身份认证）</div>
@@ -653,6 +669,8 @@ document.addEventListener('change', (event) => {
     render(true)
   } else if (act === 'source-toggle') {
     api('source.update', { id, enabled: toggle.checked }, { quiet: true })
+  } else if (act === 'toggle-webvpn') {
+    api('settings.save', { settings: { webvpn: { enabled: toggle.checked } } }, { quiet: true })
   } else if (act === 'toggle-llm') {
     api('settings.save', { settings: { llm: toggle.checked } }, { quiet: true })
   } else if (act === 'toggle-autoschedule') {
@@ -876,6 +894,19 @@ document.addEventListener('click', async (event) => {
             .filter((value) => Number.isFinite(value) && value >= 0),
         },
       })
+      break
+    }
+    case 'webvpn-save': {
+      const draft = drafts.settings
+      if (!draft) break
+      const cookie = (draft.webvpnCookie || '').trim()
+      draft.webvpnCookie = ''
+      await api('settings.save', { settings: { webvpn: cookie ? { cookie } : {} } })
+      break
+    }
+    case 'webvpn-clear-cookie': {
+      if (drafts.settings) drafts.settings.webvpnCookie = ''
+      await api('settings.save', { settings: { webvpn: { clearCookie: true } } })
       break
     }
     case 'llm-save': {

@@ -29,6 +29,11 @@ const {
   countdownText,
 } = core
 
+/** 校外模式会话过期的统一提示（列表过期、声称 JSON 却回登录页都用它）。 */
+const WEBVPN_EXPIRED_MESSAGE =
+  'WebVPN 网关会话已过期：返回的是登录页而不是通知内容。' +
+  '请在浏览器重新登录 WebVPN，把新的网关 Cookie 粘到「设置 → 校外模式」，再抓取一次'
+
 /** 响应体看起来是不是 JSON（用来兜住「接口地址但解析方式填了 HTML」的情况）。 */
 function isJsonText(text) {
   const trimmed = String(text || '').trimStart()
@@ -108,13 +113,25 @@ export class CampusService {
     }
   }
 
+  /** 校外模式配置：BJUT 专用，只认开关与网关 Cookie，其余（含网关地址）一律用内置值。 */
+  webvpnConfig() {
+    const raw = this.store?.settings?.webvpn
+    return {
+      ...core.DEFAULT_WEBVPN,
+      enabled: Boolean(raw?.enabled),
+      cookie: String(raw?.cookie || ''),
+    }
+  }
+
   /* ------------------------------ 抓取 ------------------------------ */
 
   async fetchPage(source, url) {
+    const vpn = this.webvpnConfig()
     const response = await fetchRaw(url, {
       cookie: source.cookie || '',
       resolveIp: source.resolveIp || '',
       timeoutMs: 25_000,
+      webvpn: vpn,
     })
     const text = decodeBody(response.body, response.headers)
     const contentType = String(response.headers['content-type'] || '')
@@ -122,6 +139,11 @@ export class CampusService {
       throw new Error(`需要登录（HTTP ${response.status}），请在「数据源」里填写登录态 Cookie`)
     }
     if (response.status >= 400) throw new Error(`HTTP ${response.status}`)
+    /* 校外模式：网关会话过期常是 200 + 登录页（HTML）或 JSON 错误体，
+       对所有 content-type 都先拦下来，别把登录页当成 0 条通知 */
+    if (core.webvpnSessionExpired(text, vpn)) {
+      throw new Error(WEBVPN_EXPIRED_MESSAGE)
+    }
     /* 接口型数据源：用业务错误码判断登录态，别拿页面文案误伤正常数据 */
     if (/json/i.test(contentType)) {
       try {
@@ -132,11 +154,15 @@ export class CampusService {
         }
       } catch (error) {
         if (String(error?.message || '').startsWith('登录态失效')) throw error
+        /* 网关声称 JSON 却返回登录页 HTML：校外模式下别把解析失败吞成 0 条 */
+        if (core.isWebvpnEnabled(vpn)) throw new Error(WEBVPN_EXPIRED_MESSAGE)
       }
     } else if (/(id=["']?(?:unPassword|pwPassword|cptPassword))|cas\/login|login-normal\.html/i.test(text) && text.length < 30_000) {
       throw new Error('被重定向到登录页：登录态失效，请更新 Cookie')
     }
-    return text
+    /* 网关会把响应里的链接一起改写成网关地址：还原回门户原始地址，
+       让 new URL / 去重 / 详情跟进仍按原来的地址走 */
+    return core.restoreUrlsInText(text, vpn)
   }
 
   async fetchSource(source) {
@@ -183,6 +209,7 @@ export class CampusService {
   }
 
   async fetchDetailText(notice, source) {
+    const vpn = this.webvpnConfig()
     /* 接口型数据源：正文往往在详情接口的某个字段里，而不是一个 HTML 页面 */
     if (source.detailUrlTemplate) {
       const url = String(source.detailUrlTemplate)
@@ -193,9 +220,12 @@ export class CampusService {
           cookie: source.cookie || '',
           resolveIp: source.resolveIp || '',
           timeoutMs: 20_000,
+          webvpn: vpn,
         })
         if (response.status >= 400) return ''
         const text = decodeBody(response.body, response.headers)
+        /* 网关回登录页时别把它当成正文 */
+        if (core.webvpnSessionExpired(text, vpn)) return ''
         if (source.contentPath) {
           try {
             const json = JSON.parse(text)
@@ -216,9 +246,11 @@ export class CampusService {
         cookie: source.cookie || '',
         resolveIp: source.resolveIp || '',
         timeoutMs: 20_000,
+        webvpn: vpn,
       })
       if (response.status >= 400) return ''
       const html = decodeBody(response.body, response.headers)
+      if (core.webvpnSessionExpired(html, vpn)) return ''
       const text = extractMainContent(html)
       if (text.length >= 20) return text
       if (/<img[\s>]/i.test(html)) return '〔正文以图片或附件形式发布，建议打开原文查看〕'
@@ -276,7 +308,7 @@ export class CampusService {
       await this.fetchPage(source, source.url)
       return true
     } catch (error) {
-      return !/登录态失效|需要登录|请登录/.test(error?.message || String(error))
+      return !/登录态失效|需要登录|请登录|WebVPN 网关会话已过期/.test(error?.message || String(error))
     } finally {
       source.cookie = backup
     }
@@ -292,6 +324,9 @@ export class CampusService {
    */
   async autoLogin() {
     const account = this.config?.account
+    const vpn = this.webvpnConfig()
+    /* 走 WebVPN 时统一按门户原始地址判定，避免网关域名让 host 比较失效 */
+    const effectiveService = core.restoreUrl(account?.service || '', vpn)
     if (!account?.username || !account?.passwordEnc) {
       return { ok: false, reason: '还没保存统一身份认证账号密码（设置页可以填）' }
     }
@@ -309,12 +344,13 @@ export class CampusService {
       service: account.service,
       username: account.username,
       password,
+      webvpn: vpn,
     })
     /* CAS 说成功不代表门户认你：用新 Cookie 探测一下，不行就换认证回调地址重来 */
     if (result.ok) {
       let portalHost = ""
       try {
-        portalHost = new URL(account.service).host
+        portalHost = new URL(effectiveService).host
       } catch {
         portalHost = ""
       }
@@ -322,12 +358,13 @@ export class CampusService {
       if (!alive) result = { ok: false, reason: NO_PORTAL_SESSION }
     }
     if (!result.ok && /没有下发自己的会话/.test(result.reason || "") && !/actionCasLogin|casLogin|redirect_url/i.test(account.service || "")) {
-      for (const candidate of casCallbackCandidates(account.service)) {
+      for (const candidate of casCallbackCandidates(effectiveService)) {
         const fixed = await casLogin({
           casBase: account.casBase,
           service: candidate,
           username: account.username,
           password,
+          webvpn: vpn,
         })
         if (fixed.ok) {
           let host = ""
@@ -364,7 +401,7 @@ export class CampusService {
     /* 只更新同一个门户域名下的数据源（避免把会话写到不相关的站点） */
     let portalHost = ''
     try {
-      portalHost = new URL(account.service).host
+      portalHost = new URL(effectiveService).host
     } catch {
       portalHost = ''
     }
@@ -955,6 +992,21 @@ export class CampusService {
         if (Array.isArray(patch.autoRemindBefore) && patch.autoRemindBefore.length) {
           settings.autoRemindBefore = patch.autoRemindBefore.map((n) => numberOr(n, 60, 0, 100_000))
         }
+        /* 校外模式只存开关与网关 Cookie；网关地址、重写模板、登录页特征一律用内置值 */
+        if (patch.webvpn && typeof patch.webvpn === 'object') {
+          const current = settings.webvpn || core.DEFAULT_WEBVPN
+          const next = {
+            ...core.DEFAULT_WEBVPN,
+            enabled: Boolean(current.enabled),
+            cookie: String(current.cookie || ''),
+          }
+          if (typeof patch.webvpn.enabled === 'boolean') next.enabled = patch.webvpn.enabled
+          if (typeof patch.webvpn.cookie === 'string' && patch.webvpn.cookie.trim()) {
+            next.cookie = patch.webvpn.cookie.trim()
+          }
+          if (patch.webvpn.clearCookie === true) next.cookie = ''
+          settings.webvpn = next
+        }
         await this.save()
         this.restartTimers()
         return { ok: true, state: this.state() }
@@ -972,8 +1024,15 @@ export class CampusService {
 
   state() {
     const store = this.store
+    const vpn = store.settings.webvpn || core.DEFAULT_WEBVPN
+    /* 网关 Cookie 只在服务端用，不回传给浏览器 */
+    const publicWebvpn = {
+      enabled: Boolean(vpn.enabled),
+      gateway: core.WEBVPN_GATEWAY,
+      hasCookie: Boolean(vpn.cookie),
+    }
     return {
-      settings: store.settings,
+      settings: { ...store.settings, webvpn: publicWebvpn },
       sources: store.sources.map((source) => ({
         id: source.id,
         name: source.name,
