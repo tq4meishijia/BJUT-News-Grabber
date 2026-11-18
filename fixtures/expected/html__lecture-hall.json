@@ -1,0 +1,185 @@
+{
+  "fixture": "html__lecture-hall.html",
+  "kind": "html",
+  "baseUrl": "https://www.bjut.edu.cn/xshd.htm",
+  "generatedAt": "2026-11-18T02:40:03.967Z",
+  "bodySource": "meta",
+  "count": 6,
+  "items": [
+    {
+      "raw": {
+        "itemId": "",
+        "title": "学术活动",
+        "titleCleaned": "学术活动",
+        "url": "https://www.bjut.edu.cn/xshd.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "学术报告与讲座 - 北京工业大学 学术活动 通知公告 学术报告：人工智能前沿进展与教育变革 2026-11-15 <"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "通知公告",
+        "titleCleaned": "通知公告",
+        "url": "https://www.bjut.edu.cn/notice.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "学术报告与讲座 - 北京工业大学 学术活动 通知公告 学术报告：人工智能前沿进展与教育变革 2026-11-15 <a href=\"https://www.bjut.e"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "学术报告：人工智能前沿进展与教育变革",
+        "titleCleaned": "学术报告：人工智能前沿进展与教育变革",
+        "url": "https://www.bjut.edu.cn/info/2201/20261115.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "arset=\"utf-8\"> 学术报告与讲座 - 北京工业大学 学术活动 通知公告 学术报告：人工智能前沿进展与教育变革 2026-11-15 讲座：碳中和背景下的城市能源系统 2026-11-16 <a href=\"https://www.bjut.edu.cn/"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "讲座：碳中和背景下的城市能源系统",
+        "titleCleaned": "讲座：碳中和背景下的城市能源系统",
+        "url": "https://www.bjut.edu.cn/info/2201/20261116.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "href=\"/notice.htm\">通知公告 学术报告：人工智能前沿进展与教育变革 2026-11-15 讲座：碳中和背景下的城市能源系统 2026-11-16 报告会：数学建模竞赛经验分享与培训 2026-11-18 <a href=\"https://www.bjut.edu.cn"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "报告会：数学建模竞赛经验分享与培训",
+        "titleCleaned": "报告会：数学建模竞赛经验分享与培训",
+        "url": "https://www.bjut.edu.cn/info/2201/20261118.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "61115.htm\">学术报告：人工智能前沿进展与教育变革 2026-11-15 讲座：碳中和背景下的城市能源系统 2026-11-16 报告会：数学建模竞赛经验分享与培训 2026-11-18 学术报告：新型功能材料的制备与应用 2026-11-20"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告",
+          "竞赛"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 50,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告、竞赛",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "学术报告：新型功能材料的制备与应用",
+        "titleCleaned": "学术报告：新型功能材料的制备与应用",
+        "url": "https://www.bjut.edu.cn/info/2201/20261120.htm",
+        "publishedAt": "2026-11-16",
+        "dateGuessed": "",
+        "context": "261116.htm\">讲座：碳中和背景下的城市能源系统 2026-11-16 报告会：数学建模竞赛经验分享与培训 2026-11-18 学术报告：新型功能材料的制备与应用 2026-11-20"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告题目：人工智能前沿进展与教育变革",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    }
+  ]
+}

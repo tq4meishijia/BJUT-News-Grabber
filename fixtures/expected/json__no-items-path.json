@@ -1,0 +1,92 @@
+{
+  "fixture": "json__no-items-path.json",
+  "kind": "json",
+  "baseUrl": "https://gs.bjut.edu.cn/api/news",
+  "generatedAt": "2026-11-18T02:40:04.000Z",
+  "bodySource": "context",
+  "count": 3,
+  "items": [
+    {
+      "raw": {
+        "itemId": "3301",
+        "title": "关于2026级研究生学籍信息核对的通知",
+        "titleCleaned": "关于2026级研究生学籍信息核对的通知",
+        "url": "",
+        "publishedAt": "2026-11-10",
+        "dateGuessed": "",
+        "context": "请于2027年3月5日前提交学籍异动申请表，联系人：王老师 电话：010-67396666。"
+      },
+      "extract": {
+        "tags": [
+          "学籍"
+        ],
+        "deadline": "2027-03-05T23:59",
+        "contact": "王老师 · 010-67396666"
+      },
+      "score": 36,
+      "rule": {
+        "summary": "请于2027年3月5日前提交学籍异动申请表，联系人：王老师 电话：010-67396666",
+        "useful": [
+          "关联：学籍",
+          "截止：2027-03-05 23:59（还有 108 天）",
+          "找谁办：王老师 · 010-67396666",
+          "需要你主动报名/提交材料"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "3302",
+        "title": "关于研究生学位论文答辩资格审核的通知",
+        "titleCleaned": "关于研究生学位论文答辩资格审核的通知",
+        "url": "",
+        "publishedAt": "2026-11-12",
+        "dateGuessed": "",
+        "context": "学位论文答辩资格审核即将开始，请提前准备论文与成绩单。"
+      },
+      "extract": {
+        "tags": [
+          "成绩",
+          "论文",
+          "答辩"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 48,
+      "rule": {
+        "summary": "学位论文答辩资格审核即将开始，请提前准备论文与成绩单",
+        "useful": [
+          "关联：成绩、论文、答辩"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "3303",
+        "title": "关于研究生课程成绩录入与绩点核对的通知",
+        "titleCleaned": "关于研究生课程成绩录入与绩点核对的通知",
+        "url": "",
+        "publishedAt": "2026-11-14",
+        "dateGuessed": "",
+        "context": "成绩与绩点有异议的，请在答辩资格审核前提出。"
+      },
+      "extract": {
+        "tags": [
+          "成绩",
+          "绩点",
+          "答辩"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 48,
+      "rule": {
+        "summary": "成绩与绩点有异议的，请在答辩资格审核前提出",
+        "useful": [
+          "关联：成绩、绩点、答辩"
+        ]
+      }
+    }
+  ]
+}

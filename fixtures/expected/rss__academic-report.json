@@ -1,0 +1,98 @@
+{
+  "fixture": "rss__academic-report.xml",
+  "kind": "rss",
+  "baseUrl": "https://www.bjut.edu.cn/rss/academic.xml",
+  "generatedAt": "2026-11-18T02:40:04.014Z",
+  "bodySource": "meta",
+  "count": 3,
+  "items": [
+    {
+      "raw": {
+        "itemId": "",
+        "title": "学术报告：人工智能前沿进展与教育变革",
+        "titleCleaned": "学术报告：人工智能前沿进展与教育变革",
+        "url": "https://www.bjut.edu.cn/info/2201/20261115.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "报告人：张明教授，时间：2026年11月20日14:00，地点：知新楼报告厅。"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告人：张明教授，清华大学",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "讲座：碳中和背景下的城市能源系统",
+        "titleCleaned": "讲座：碳中和背景下的城市能源系统",
+        "url": "https://www.bjut.edu.cn/info/2201/20261116.htm",
+        "publishedAt": "2026-11-16",
+        "dateGuessed": "",
+        "context": "本讲座面向全体研究生，讨论城市能源系统转型路径。"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "报告人：张明教授，清华大学",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "报告会：数学建模竞赛经验分享与培训",
+        "titleCleaned": "报告会：数学建模竞赛经验分享与培训",
+        "url": "https://www.bjut.edu.cn/info/2201/20261118.htm",
+        "publishedAt": "2026-11-18",
+        "dateGuessed": "",
+        "context": "数学建模竞赛培训系列报告会，欢迎参赛同学参加。"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告",
+          "竞赛"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 50,
+      "rule": {
+        "summary": "报告人：张明教授，清华大学",
+        "useful": [
+          "关联：报名、讲座、报告、竞赛",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    }
+  ]
+}

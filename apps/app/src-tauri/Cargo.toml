@@ -1,0 +1,43 @@
+[package]
+name = "cn-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tauri 2 桌面壳：命令层 + 平台外壳（唯一允许 use tauri:: 的地方）"
+
+[lib]
+name = "cn_app"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
+# 单元测试已全部下沉到 cn-model（登录状态机）等纯逻辑 crate。
+# 壳层测试二进制会链接 wry/WebView2 栈，在无 MSVC 链接器的 GNU 工具链上
+# 无法启动（STATUS_ENTRYPOINT_NOT_FOUND，已 A/B 排除本仓库配置影响）。
+# 业务逻辑的可测面均在 cn-* crates（109 例），此处禁用壳层测试副车。
+test = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+keyring = { version = "3", features = ["windows-native"] }
+cn-model = { workspace = true }
+cn-core = { workspace = true }
+cn-net = { workspace = true }
+cn-store = { workspace = true }
+cn-llm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }

@@ -1,0 +1,13 @@
+{
+  "baseUrl": "https://www.bjut.edu.cn/api/intl",
+  "source": {
+    "itemsPath": "data.rows",
+    "map": {
+      "title": "title",
+      "id": "id",
+      "date": "date",
+      "summary": "summary"
+    },
+    "urlTemplate": "https://www.bjut.edu.cn/gjjl/detail/{id}.html"
+  }
+}

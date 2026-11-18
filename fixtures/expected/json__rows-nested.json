@@ -1,0 +1,90 @@
+{
+  "fixture": "json__rows-nested.json",
+  "kind": "json",
+  "baseUrl": "https://www.bjut.edu.cn/api/intl",
+  "generatedAt": "2026-11-18T02:40:04.005Z",
+  "bodySource": "context",
+  "count": 3,
+  "items": [
+    {
+      "raw": {
+        "itemId": "7701",
+        "title": "关于选派2027年春季学期校际交换生的通知",
+        "titleCleaned": "关于选派2027年春季学期校际交换生的通知",
+        "url": "https://www.bjut.edu.cn/gjjl/detail/7701.html",
+        "publishedAt": "2026-11-05",
+        "dateGuessed": "",
+        "context": "2027年春季学期校际交换生项目现已开放报名，需提交成绩单与语言证明，请于2026年12月20日前交材料。"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "成绩",
+          "交换"
+        ],
+        "deadline": "2026-12-20T23:59",
+        "contact": ""
+      },
+      "score": 48,
+      "rule": {
+        "summary": "2027年春季学期校际交换生项目现已开放报名，需提交成绩单与语言证明，请于2026年12月20日前交材料",
+        "useful": [
+          "关联：报名、成绩、交换",
+          "截止：2026-12-20 23:59（还有 33 天）",
+          "需要你主动报名/提交材料"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "7702",
+        "title": "关于申报国家留学基金委国际交流项目的通知",
+        "titleCleaned": "关于申报国家留学基金委国际交流项目的通知",
+        "url": "https://www.bjut.edu.cn/gjjl/detail/7702.html",
+        "publishedAt": "2026-11-06",
+        "dateGuessed": "",
+        "context": "国家留学基金委国际交流项目申报现已开始，详情见项目简章。"
+      },
+      "extract": {
+        "tags": [
+          "国际交流"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 28,
+      "rule": {
+        "summary": "国家留学基金委国际交流项目申报现已开始，详情见项目简章",
+        "useful": [
+          "关联：国际交流"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "7703",
+        "title": "关于举办海外高校线上宣讲会的通知",
+        "titleCleaned": "关于举办海外高校线上宣讲会的通知",
+        "url": "https://www.bjut.edu.cn/gjjl/detail/7703.html",
+        "publishedAt": "2026-11-07",
+        "dateGuessed": "",
+        "context": "海外高校线上宣讲会将于11月20日举行，面向有意向交换的学生。"
+      },
+      "extract": {
+        "tags": [
+          "宣讲",
+          "交换"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 38,
+      "rule": {
+        "summary": "海外高校线上宣讲会将于11月20日举行，面向有意向交换的学生",
+        "useful": [
+          "关联：宣讲、交换"
+        ]
+      }
+    }
+  ]
+}

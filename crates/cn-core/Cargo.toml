@@ -1,0 +1,20 @@
+[package]
+name = "cn-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "纯逻辑核心：列表解析 / 正文定位 / 截止与联系人抽取 / 打分 / 规则摘要（零 IO、零网络、零 async）"
+
+[dependencies]
+cn-model = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+fancy-regex = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+encoding_rs = { workspace = true }

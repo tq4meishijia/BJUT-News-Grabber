@@ -1,0 +1,11 @@
+{
+  "baseUrl": "https://gs.bjut.edu.cn/api/news",
+  "source": {
+    "map": {
+      "title": "title",
+      "id": "id",
+      "date": "date",
+      "summary": "summary"
+    }
+  }
+}

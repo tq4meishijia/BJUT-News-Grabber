@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "最小能力集（S5）：core 默认 + 通知 + 外链打开 + 自启动。导出/导入走 Rust 命令直接读写文件，不开 fs 权限。",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:webview:allow-internal-toggle-devtools",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-request-permission",
+    "autostart:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" },
+        { "url": "https://developer.microsoft.com/*" }
+      ]
+    }
+  ]
+}

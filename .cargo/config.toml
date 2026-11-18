@@ -1,0 +1,10 @@
+# 工作区 cargo 配置。
+#
+# windows-gnu 链接修复：cn-app 的 crate-type 含 cdylib（Android 预留），
+# GNU 风格 cdylib 默认导出整棵依赖图的符号（实测 ~129k），超出 PE 导出表
+# 上限 65535，链接失败。--exclude-libs,ALL 令链接器不再导出静态库成员符号，
+# 只保留 crate 自身对象文件的导出（入口等），链接恢复可用。
+# MSVC 工具链（CI / 未来 Android）不受影响；届时若同样超限，用自定义 .def
+# 只导出移动入口即可。
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--exclude-libs,ALL"]

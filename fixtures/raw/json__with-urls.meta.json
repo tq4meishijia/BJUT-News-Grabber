@@ -1,0 +1,13 @@
+{
+  "baseUrl": "https://cc.bjut.edu.cn/api/jobs",
+  "source": {
+    "itemsPath": "data",
+    "map": {
+      "title": "title",
+      "id": "id",
+      "url": "url",
+      "date": "date",
+      "summary": "summary"
+    }
+  }
+}

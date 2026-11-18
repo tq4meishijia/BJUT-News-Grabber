@@ -1,0 +1,12 @@
+{
+  "baseUrl": "https://jwc.bjut.edu.cn/api/list",
+  "source": {
+    "itemsPath": "list",
+    "map": {
+      "title": "title",
+      "date": "date",
+      "summary": "summary"
+    },
+    "urlTemplate": "https://jwc.bjut.edu.cn/tzgg/detail-{index}.html"
+  }
+}

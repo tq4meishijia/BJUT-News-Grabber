@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>校园通知 · 日程</title>
+    <link rel="icon" href="icon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 8a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 14 18 8" />
+          <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+        </svg>
+        <div>
+          <h1>校园通知 · 日程</h1>
+          <p id="status-line">正在读取数据…</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-notify" class="btn ghost" title="允许后，日程到点会弹系统通知">开启桌面通知</button>
+        <button id="btn-poll" class="btn primary">立即抓取</button>
+      </div>
+    </header>
+
+    <!-- 抓取进度条（poll://progress） -->
+    <div id="poll-progress" class="poll-progress" hidden><i></i></div>
+
+    <nav id="tabs" class="tabs" aria-label="分区"></nav>
+    <main id="view" class="view"></main>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+
+    <!-- 登录向导浮层（11 状态 + 3 步指示） -->
+    <div id="login-wizard" class="wizard-overlay" hidden>
+      <div class="wizard card" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
+        <div class="wizard-steps" id="wizard-steps"></div>
+        <h2 id="wizard-title">登录学校门户</h2>
+        <p id="wizard-hint" class="hint"></p>
+        <div id="wizard-error" class="error-bar" hidden></div>
+        <div class="wizard-modes" id="wizard-modes"></div>
+        <div class="actions">
+          <button class="btn ghost" data-act="wizard-cancel">取消</button>
+          <button class="btn primary" data-act="wizard-primary" id="wizard-primary">开始</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

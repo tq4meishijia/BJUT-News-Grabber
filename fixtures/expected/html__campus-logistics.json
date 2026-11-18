@@ -1,0 +1,102 @@
+{
+  "fixture": "html__campus-logistics.html",
+  "kind": "html",
+  "baseUrl": "https://www.bjut.edu.cn/hqfw.htm",
+  "generatedAt": "2026-11-18T02:40:03.928Z",
+  "bodySource": "meta",
+  "count": 4,
+  "items": [
+    {
+      "raw": {
+        "itemId": "",
+        "title": "关于食堂改造项目招标结果的公告",
+        "titleCleaned": "关于食堂改造项目招标结果的公告",
+        "url": "https://www.bjut.edu.cn/info/6601/20261110.htm",
+        "publishedAt": "2026-11-10",
+        "dateGuessed": "",
+        "context": "> 后勤服务通知 - 北京工业大学后勤保障处 首页 后勤服务 关于食堂改造项目招标结果的公告 2026-11-10 关于物业保洁服务采购项目中标的公示 2026-11-11 <a href=\"https://www.bjut.edu.cn"
+      },
+      "extract": {
+        "tags": [],
+        "deadline": "",
+        "contact": "钱师傅 · 010-67393333"
+      },
+      "score": 5,
+      "rule": {
+        "summary": "根据后勤保障处工作安排，食堂改造项目招标已完成，物业保洁服务采购项目已公示中标结果",
+        "useful": [
+          "找谁办：钱师傅 · 010-67393333"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "关于物业保洁服务采购项目中标的公示",
+        "titleCleaned": "关于物业保洁服务采购项目中标的公示",
+        "url": "https://www.bjut.edu.cn/info/6601/20261111.htm",
+        "publishedAt": "2026-11-10",
+        "dateGuessed": "",
+        "context": "tm\">首页 后勤服务 关于食堂改造项目招标结果的公告 2026-11-10 关于物业保洁服务采购项目中标的公示 2026-11-11 关于冬季供暖试运行的通知 2026-11-12 <a href=\"https://www.bjut.edu.cn/info"
+      },
+      "extract": {
+        "tags": [],
+        "deadline": "",
+        "contact": "钱师傅 · 010-67393333"
+      },
+      "score": 5,
+      "rule": {
+        "summary": "根据后勤保障处工作安排，食堂改造项目招标已完成，物业保洁服务采购项目已公示中标结果",
+        "useful": [
+          "找谁办：钱师傅 · 010-67393333"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "关于冬季供暖试运行的通知",
+        "titleCleaned": "关于冬季供暖试运行的通知",
+        "url": "https://www.bjut.edu.cn/info/6601/20261112.htm",
+        "publishedAt": "2026-11-10",
+        "dateGuessed": "",
+        "context": "0261110.htm\">关于食堂改造项目招标结果的公告 2026-11-10 关于物业保洁服务采购项目中标的公示 2026-11-11 关于冬季供暖试运行的通知 2026-11-12 规章制度与资料汇编（下载专区） 2026-11-13"
+      },
+      "extract": {
+        "tags": [],
+        "deadline": "",
+        "contact": "钱师傅 · 010-67393333"
+      },
+      "score": 22,
+      "rule": {
+        "summary": "根据后勤保障处工作安排，食堂改造项目招标已完成，物业保洁服务采购项目已公示中标结果",
+        "useful": [
+          "找谁办：钱师傅 · 010-67393333"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "规章制度与资料汇编（下载专区）",
+        "titleCleaned": "规章制度与资料汇编（下载专区）",
+        "url": "https://www.bjut.edu.cn/info/6601/20261113.htm",
+        "publishedAt": "",
+        "dateGuessed": "",
+        "context": "1/20261111.htm\">关于物业保洁服务采购项目中标的公示 2026-11-11 关于冬季供暖试运行的通知 2026-11-12 规章制度与资料汇编（下载专区） 2026-11-13"
+      },
+      "extract": {
+        "tags": [],
+        "deadline": "",
+        "contact": "钱师傅 · 010-67393333"
+      },
+      "score": 12,
+      "rule": {
+        "summary": "根据后勤保障处工作安排，食堂改造项目招标已完成，物业保洁服务采购项目已公示中标结果",
+        "useful": [
+          "找谁办：钱师傅 · 010-67393333"
+        ]
+      }
+    }
+  ]
+}

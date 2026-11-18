@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cn-model",
+    "crates/cn-core",
+    "crates/cn-net",
+    "crates/cn-llm",
+    "crates/cn-store",
+    "crates/cn-rag",
+    "apps/app/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/tq4meishijia/BJUT-News-Grabber"
+
+[workspace.dependencies]
+cn-model = { path = "crates/cn-model" }
+cn-core = { path = "crates/cn-core" }
+cn-net = { path = "crates/cn-net" }
+cn-llm = { path = "crates/cn-llm" }
+cn-store = { path = "crates/cn-store" }
+cn-rag = { path = "crates/cn-rag" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+fancy-regex = "0.13"
+url = "2"
+sha1 = "0.10"
+aes = "0.8"
+cfb-mode = "0.8"
+async-trait = "0.1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "io-util"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "charset"] }
+encoding_rs = "0.8"
+bytes = "1"
+
+[profile.release]
+lto = true
+opt-level = "z"
+strip = true
+codegen-units = 1

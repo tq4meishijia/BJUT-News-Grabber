@@ -1,0 +1,9 @@
+{
+  "fixture": "json__err-10041.json",
+  "kind": "json",
+  "baseUrl": "https://example.edu.cn/",
+  "generatedAt": "2026-11-18T02:40:03.995Z",
+  "bodySource": "context",
+  "count": 0,
+  "items": []
+}

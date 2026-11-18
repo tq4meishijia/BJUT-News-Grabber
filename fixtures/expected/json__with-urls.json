@@ -1,0 +1,91 @@
+{
+  "fixture": "json__with-urls.json",
+  "kind": "json",
+  "baseUrl": "https://cc.bjut.edu.cn/api/jobs",
+  "generatedAt": "2026-11-18T02:40:04.011Z",
+  "bodySource": "context",
+  "count": 3,
+  "items": [
+    {
+      "raw": {
+        "itemId": "5501",
+        "title": "2026年秋季校园招聘双选会宣讲安排",
+        "titleCleaned": "2026年秋季校园招聘双选会宣讲安排",
+        "url": "https://cc.bjut.edu.cn/info/5501/20261112.htm",
+        "publishedAt": "2026-11-12",
+        "dateGuessed": "",
+        "context": "双选会报名现已开放，请于2026年11月26日前完成预约。联系人：孙老师 电话：010-67392222。"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "招聘",
+          "宣讲"
+        ],
+        "deadline": "2026-11-26T23:59",
+        "contact": "孙老师 · 010-67392222"
+      },
+      "score": 56,
+      "rule": {
+        "summary": "双选会报名现已开放，请于2026年11月26日前完成预约",
+        "useful": [
+          "关联：报名、招聘、宣讲",
+          "截止：2026-11-26 23:59（还有 9 天）",
+          "找谁办：孙老师 · 010-67392222",
+          "需要你主动报名/提交材料"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "5502",
+        "title": "关于举办简历制作与面试技巧讲座的通知",
+        "titleCleaned": "关于举办简历制作与面试技巧讲座的通知",
+        "url": "https://cc.bjut.edu.cn/info/5501/20261113.htm",
+        "publishedAt": "2026-11-13",
+        "dateGuessed": "",
+        "context": "简历制作与面试技巧讲座将于11月22日19:00举办，欢迎参加。"
+      },
+      "extract": {
+        "tags": [
+          "讲座"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 32,
+      "rule": {
+        "summary": "简历制作与面试技巧讲座将于11月22日19:00举办，欢迎参加",
+        "useful": [
+          "关联：讲座",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "5503",
+        "title": "关于组织学生参加就业实习双选会的通知",
+        "titleCleaned": "关于组织学生参加就业实习双选会的通知",
+        "url": "https://cc.bjut.edu.cn/info/5501/20261115.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "就业实习双选会面向全体研究生，提供实习岗位信息。"
+      },
+      "extract": {
+        "tags": [
+          "实习"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 28,
+      "rule": {
+        "summary": "就业实习双选会面向全体研究生，提供实习岗位信息",
+        "useful": [
+          "关联：实习"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "fixture": "html__webvpn-lecture.html",
+  "kind": "html",
+  "baseUrl": "https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/xshd.htm",
+  "generatedAt": "2026-11-18T02:40:03.985Z",
+  "bodySource": "meta",
+  "count": 3,
+  "items": [
+    {
+      "raw": {
+        "itemId": "",
+        "title": "学术报告：人工智能前沿进展与教育变革",
+        "titleCleaned": "学术报告：人工智能前沿进展与教育变革",
+        "url": "https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/info/2201/20261115.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "学术报告 - 网关改写用例 学术报告：人工智能前沿进展与教育变革 2026-11-15 讲座：碳中和背景下的城市能源系统"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "时间：2026年11月22日14:00，地点：知新楼一层报告厅",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "讲座：碳中和背景下的城市能源系统",
+        "titleCleaned": "讲座：碳中和背景下的城市能源系统",
+        "url": "https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/info/2201/20261116.htm",
+        "publishedAt": "2026-11-15",
+        "dateGuessed": "",
+        "context": "f=\"https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/info/2201/20261115.htm\">学术报告：人工智能前沿进展与教育变革 2026-11-15 讲座：碳中和背景下的城市能源系统 2026-11-16 报告会：数学建模竞赛经验分享</"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 44,
+      "rule": {
+        "summary": "时间：2026年11月22日14:00，地点：知新楼一层报告厅",
+        "useful": [
+          "关联：报名、讲座、报告",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    },
+    {
+      "raw": {
+        "itemId": "",
+        "title": "报告会：数学建模竞赛经验分享",
+        "titleCleaned": "报告会：数学建模竞赛经验分享",
+        "url": "https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/info/2201/20261118.htm",
+        "publishedAt": "2026-11-16",
+        "dateGuessed": "",
+        "context": "ref=\"https://webvpn.bjut.edu.cn/https/77726476706e69737468656265737421e7e056d2253a7d44300d8db9d6562d/info/2201/20261116.htm\">讲座：碳中和背景下的城市能源系统 2026-11-16 报告会：数学建模竞赛经验分享 2026-11-18"
+      },
+      "extract": {
+        "tags": [
+          "报名",
+          "讲座",
+          "报告",
+          "竞赛"
+        ],
+        "deadline": "",
+        "contact": ""
+      },
+      "score": 50,
+      "rule": {
+        "summary": "时间：2026年11月22日14:00，地点：知新楼一层报告厅",
+        "useful": [
+          "关联：报名、讲座、报告、竞赛",
+          "需要你主动报名/提交材料",
+          "讲座类，注意时间地点是否需要报名"
+        ]
+      }
+    }
+  ]
+}

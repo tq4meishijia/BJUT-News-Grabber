@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>北京工业大学图书馆</title>
+<link href="https://lib.bjut.edu.cn/"/>
+<updated>2026-11-15T08:00:00+08:00</updated>
+<entry>
+<title>关于图书馆延长开馆时间的通知</title>
+<link href="https://lib.bjut.edu.cn/info/9901/20261115.htm"/>
+<published>2026-11-15T08:00:00+08:00</published>
+<summary>期末考试期间图书馆将延长开馆时间至23:00。</summary>
+</entry>
+<entry>
+<title>关于开通电子资源校外访问服务的通知</title>
+<link href="https://lib.bjut.edu.cn/info/9901/20261116.htm"/>
+<published>2026-11-16T08:00:00+08:00</published>
+<summary>电子资源校外访问服务现已开通，欢迎使用。</summary>
+</entry>
+<entry>
+<title>关于举办数据库检索技巧讲座的通知</title>
+<link href="https://lib.bjut.edu.cn/info/9901/20261117.htm"/>
+<published>2026-11-17T08:00:00+08:00</published>
+<summary>数据库检索技巧讲座将于11月28日举行，欢迎参加。</summary>
+</entry>
+</feed>

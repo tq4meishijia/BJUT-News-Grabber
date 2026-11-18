@@ -1,0 +1,27 @@
+[package]
+name = "cn-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "持久化 + 18 op + 抓取流水线 + 日程 + 提醒调度（无 tauri）"
+
+[dependencies]
+cn-model = { workspace = true }
+cn-core = { workspace = true }
+cn-net = { workspace = true }
+cn-llm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+sha1 = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+aes = { workspace = true }
+cfb-mode = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
