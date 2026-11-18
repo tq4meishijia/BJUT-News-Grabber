@@ -36,15 +36,23 @@ static LOGIN_PAGE_HTML: LazyLock<Regex> = LazyLock::new(|| {
 static BIZ_LOGIN_WORDS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("请登录|未登录|登录超时|重新登录").unwrap());
 
-/// 构造出站请求（B8：门户 Cookie 与网关 Cookie 分离）。
+/// 构造出站请求（B8：门户 Cookie 与网关 Cookie 分离；校外模式统一经网关出站）。
 fn build_request(url: &str, source: &SourceRecord, vpn: &WebvpnConfig, timeout_ms: u64) -> FetchRequest {
     let host = url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_string()))
         .unwrap_or_default();
-    let mut req = FetchRequest::get(url, ScopeId::Portal(host));
+    // ScopeId 仍取原始内网 host：SSRF 白名单按内网域判定，语义不变。
+    let rewritten = cn_net::rewrite_url(url, vpn);
+    let mut req = FetchRequest::get(&rewritten, ScopeId::Portal(host));
     req.cookie = source.cookie.clone();
-    req.gateway_cookie = vpn.cookie.clone();
+    // 网关会话只发给网关域：关闭校外模式时 rewrite_url 原样返回内网 URL，
+    // 此时绝不下发网关 Cookie，避免把网关登录态泄露给内网/第三方地址。
+    req.gateway_cookie = if vpn.enabled {
+        vpn.cookie.clone()
+    } else {
+        String::new()
+    };
     req.timeout = std::time::Duration::from_millis(timeout_ms);
     if !source.resolve_ip.trim().is_empty() {
         req.resolve_ip = source.resolve_ip.trim().parse().ok();

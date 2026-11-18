@@ -24,7 +24,8 @@ use cn_model::SystemClock;
 use cn_net::ReqwestFetcher;
 use cn_store::CampusService;
 
-use crate::auth::AuthManager;
+use crate::auth::{AuthManager, AuthState};
+use crate::commands::FixedNow;
 use crate::secrets::SecretBackend;
 
 /// 全局应用状态（命令层共享）。
@@ -85,6 +86,35 @@ pub fn show_webview2_hint() {
     #[cfg(not(windows))]
     {
         eprintln!("缺少 WebView2 运行时");
+    }
+}
+
+/// 关窗二选一（用户确认的「弹窗二选一」行为）：true = 完全退出，false = 最小化到托盘。
+/// 默认按钮为「否」（最小化），避免误按回车杀掉后台提醒。
+fn confirm_quit() -> bool {
+    #[cfg(windows)]
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        let text = "完全退出「校园通知」？\n\n\
+            是 — 退出应用（停止后台抓取与到点提醒）\n\
+            否 — 最小化到托盘（继续在后台接收提醒）";
+        let caption = "校园通知 · 退出确认";
+        let wide_text: Vec<u16> = std::ffi::OsStr::new(text).encode_wide().chain(Some(0)).collect();
+        let wide_caption: Vec<u16> =
+            std::ffi::OsStr::new(caption).encode_wide().chain(Some(0)).collect();
+        let answer = windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            std::ptr::null_mut(),
+            wide_text.as_ptr(),
+            wide_caption.as_ptr(),
+            windows_sys::Win32::UI::WindowsAndMessaging::MB_YESNO
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_ICONQUESTION
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_DEFBUTTON2,
+        );
+        answer == windows_sys::Win32::UI::WindowsAndMessaging::IDYES
+    }
+    #[cfg(not(windows))]
+    {
+        false
     }
 }
 
@@ -151,6 +181,7 @@ pub fn run() {
             commands::get_state,
             commands::act,
             commands::auth_begin,
+            commands::auth_webvpn_login,
             commands::auth_cancel,
             commands::auth_import_cookie,
             commands::llm_test,
@@ -162,14 +193,32 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         if let RunEvent::WindowEvent {
+            label,
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } = event
         {
-            // 关窗 = 隐藏到托盘，退出才结束进程（§8 桌面行为）。
-            api.prevent_close();
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.hide();
+            match label.as_str() {
+                // 主窗口：关窗 = 询问「最小化到托盘 / 完全退出」（§8 桌面行为）。
+                "main" => {
+                    api.prevent_close();
+                    if confirm_quit() {
+                        app_handle.exit(0);
+                    } else if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+                // 登录窗：用户手动关闭 = 放行关闭，并把登录状态收尾为 Cancelled。
+                // 程序化关闭一律走 destroy()（不发 CloseRequested），不会进到这里，
+                // 因此本分支只会由用户操作触发，无与 mark_verified 的竞态。
+                "auth-login" => {
+                    let state = app_handle.state::<AppState>();
+                    if let Ok(mut auth) = state.auth.try_lock() {
+                        let progress = auth.transition("portal", AuthState::Cancelled, &FixedNow);
+                        let _ = app_handle.emit("auth://progress", &progress);
+                    };
+                }
+                _ => {}
             }
         }
     });

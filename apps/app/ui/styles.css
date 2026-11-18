@@ -622,6 +622,17 @@ label.field > span {
   transition: width 0.35s ease;
 }
 
+/* 通用操作反馈：quiet 请求也显示（quiet 只控制 toast，不控制本指示） */
+.api-pending {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.api-pending[hidden] {
+  display: none;
+}
+
 /* 登录向导浮层 */
 .wizard-overlay {
   position: fixed;
@@ -631,6 +642,10 @@ label.field > span {
   align-items: center;
   justify-content: center;
   z-index: 100;
+}
+/* 让 hidden 属性可靠生效：作者样式 display:flex 会覆盖 UA 的 [hidden]{display:none} */
+.wizard-overlay[hidden] {
+  display: none;
 }
 .wizard {
   width: min(520px, calc(100vw - 32px));

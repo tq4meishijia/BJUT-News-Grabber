@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "cn-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "cn-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "cn-model",
@@ -626,7 +626,7 @@ dependencies = [
 
 [[package]]
 name = "cn-llm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "cn-model"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "cn-net"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "async-trait",
@@ -674,11 +674,11 @@ dependencies = [
 
 [[package]]
 name = "cn-rag"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "cn-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "async-trait",

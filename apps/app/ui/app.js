@@ -5,6 +5,7 @@ import {
   authBegin,
   authCancel,
   authImportCookie,
+  authWebvpnLogin,
   listenTauri,
   openExternal,
   notifySystem,
@@ -108,7 +109,25 @@ async function fetchState() {
   return state
 }
 
+/* 全局请求计数：quiet 只抑制 toast，不抑制 pending 指示
+   （慢 WebView2 上点了按钮要有即时反馈；并发用 finally 递减保证计数正确） */
+let apiPending = 0
+function renderApiPending() {
+  let el = $('#api-pending')
+  if (!el && $('#status-line')) {
+    el = document.createElement('span')
+    el.id = 'api-pending'
+    el.className = 'api-pending'
+    $('#status-line').insertAdjacentElement('afterend', el)
+  }
+  if (!el) return
+  el.hidden = apiPending === 0
+  if (apiPending > 0) el.textContent = `处理中…（${apiPending}）`
+}
+
 async function api(op, payload = {}, options = {}) {
+  apiPending += 1
+  renderApiPending()
   try {
     // invoke('act', { req: { op, ...payload } }) —— op 名与载荷保留 Node 版契约
     const data = await tauriApi(op, payload)
@@ -122,6 +141,9 @@ async function api(op, payload = {}, options = {}) {
     lastError = String(error?.message || error)
     toast('error', '请求失败', lastError)
     return { ok: false, error: lastError }
+  } finally {
+    apiPending = Math.max(0, apiPending - 1)
+    renderApiPending()
   }
 }
 
@@ -583,8 +605,9 @@ function viewSettings() {
       </div>
       <label class="field"><span>网关会话 Cookie${state.settings.webvpn?.hasCookie ? '（已保存，留空不修改）' : ''}</span><textarea data-scope="settings" data-field="webvpnCookie" placeholder="浏览器登录 WebVPN 后，从 F12 → Network 复制整条 Cookie">${esc(draft.webvpnCookie)}</textarea></label>
       <div class="actions">
+        <button class="btn primary" data-act="webvpn-login">窗口登录 WebVPN</button>
         <button class="btn ghost" data-act="webvpn-clear-cookie">清除网关 Cookie</button>
-        <button class="btn primary" data-act="webvpn-save">保存网关 Cookie</button>
+        <button class="btn ghost" data-act="webvpn-save">保存网关 Cookie</button>
       </div>
     </div>
 
@@ -656,7 +679,7 @@ function viewSettings() {
       <div class="hint">上次抓取：${esc(meta.lastPollAt ? String(meta.lastPollAt).replace('T', ' ').slice(0, 16) : '从未')} · 累计 ${meta.pollCount || 0} 次</div>
       ${meta.lastPollError ? `<div class="error-bar">${esc(meta.lastPollError)}</div>` : ''}
       <div class="hint">数据文件：${esc(meta.dataPath || '')}</div>
-      <div class="hint">服务端口：${esc(meta.port || '')} · 关闭本页不影响后台抓取与提醒，关掉命令行窗口才会停止</div>
+      <div class="hint">服务端口：${esc(meta.port || '')} · 关闭窗口时可选「最小化到托盘」（继续后台抓取与提醒）或「完全退出」；托盘菜单选「退出」也可完全退出</div>
       <div class="hint">RSS 订阅地址（手机阅读器可直接订阅）：<code>http://127.0.0.1:${esc(meta.port || '')}/rss.xml</code>，只看重要的加 <code>?minScore=40</code></div>
       <div class="actions">
         <button class="btn ghost" data-act="notify-test">测试桌面通知</button>
@@ -938,6 +961,28 @@ document.addEventListener('click', async (event) => {
             .filter((value) => Number.isFinite(value) && value >= 0),
         },
       })
+      break
+    }
+    case 'webvpn-login': {
+      button.disabled = true
+      button.textContent = '正在打开登录窗…'
+      try {
+        const ticket = await authWebvpnLogin()
+        // 先复位向导，再切到网关 scope；后端 auth://progress 会继续驱动状态。
+        openWizard()
+        wizard.ticket = ticket?.id || ''
+        wizard.scope = 'gateway'
+        wizard.mode = 'WebView'
+        wizard.state = 'awaitingUser'
+        wizard.stepIndex = 1
+        wizard.error = null
+        renderWizard()
+        startWizardPolling()
+      } catch (error) {
+        toast('error', '打不开登录窗', String(error?.message || error))
+      }
+      button.disabled = false
+      button.textContent = '窗口登录 WebVPN'
       break
     }
     case 'webvpn-save': {

@@ -201,6 +201,48 @@ async fn b11_every_notice_has_summary_and_useful() {
 }
 
 #[tokio::test]
+async fn webvpn_enabled_rewrites_every_outgoing_request() {
+    // 真人复测回归：校外模式开启后，列表/分页/详情的出站 URL 必须都经网关，
+    // 且网关 Cookie 必须随请求下发；ScopeId 仍按原始内网 host 判定。
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<(String, String)>::new()));
+    let seen_clone = seen.clone();
+    let fetcher = MockFetcher::new(move |req: &cn_net::FetchRequest| {
+        seen_clone
+            .lock()
+            .unwrap()
+            .push((req.url.clone(), req.gateway_cookie.clone()));
+        Ok(cn_net::FetchResponse {
+            status: 200,
+            url: req.url.clone(),
+            headers: vec![("content-type".into(), "text/html".into())],
+            body: list_html(2).into_bytes(),
+        })
+    });
+    let mut svc = CampusService::new_for_test(temp_path("vpn"), fetcher, clock());
+    svc.store.sources.clear();
+    svc.store.sources.push(cn_store::SourceRecord {
+        id: "src".into(),
+        name: "源".into(),
+        r#type: "html".into(),
+        url: "https://my.bjut.edu.cn/list.html".into(),
+        enabled: true,
+        ..Default::default()
+    });
+    svc.store.settings.webvpn.enabled = true;
+    svc.store.settings.webvpn.cookie = "session=test".into();
+    svc.act(act("poll", serde_json::json!({}))).await;
+    let observed = seen.lock().unwrap();
+    assert!(!observed.is_empty(), "应至少发出一个请求");
+    for (url, gateway_cookie) in observed.iter() {
+        assert!(
+            url.starts_with("https://webvpn.bjut.edu.cn/"),
+            "出站必须经网关：{url}"
+        );
+        assert_eq!(gateway_cookie, "session=test", "网关 Cookie 必须随请求下发");
+    }
+}
+
+#[tokio::test]
 async fn json_source_context_fallback_bodytext() {
     // json 源无详情正文时用列表摘要兜底（bodySource=context 口径）
     let json_body = serde_json::json!({

@@ -1,6 +1,6 @@
 [package]
 name = "cn-rag"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "端侧 RAG 检索内核：切块 / 中文 bigram 分词 / BM25 / 余弦 / RRF（零第三方依赖）"
 license = "MIT"

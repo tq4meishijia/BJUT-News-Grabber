@@ -17,6 +17,11 @@ export async function authBegin(scope, mode) {
   return await T.core.invoke('auth_begin', { scope, mode })
 }
 
+/** 登录向导：WebVPN 网关窗口登录（登录后自动写入网关 Cookie）。 */
+export async function authWebvpnLogin() {
+  return await T.core.invoke('auth_webvpn_login')
+}
+
 /** 登录向导：中途取消。 */
 export async function authCancel(ticket) {
   return await T.core.invoke('auth_cancel', { ticket: ticket || '' })
