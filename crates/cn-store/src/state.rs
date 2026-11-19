@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use cn_model::state::{number_or, MAX_ITEMS_PER_SOURCE_DEFAULT};
+use cn_model::state::{number_or, AttachmentStatus, MAX_ITEMS_PER_SOURCE_DEFAULT};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -79,6 +79,15 @@ pub struct StoreSettings {
     pub notify: bool,
     #[serde(default)]
     pub webvpn: WebvpnSettings,
+    /// 默认抓取起始日期（YYYY-MM-DD，空 = 不限最早）。
+    #[serde(default)]
+    pub date_range_start: String,
+    /// 默认抓取结束日期（YYYY-MM-DD，空 = 不限最晚）。
+    #[serde(default)]
+    pub date_range_end: String,
+    /// 自动抓取附件（默认关闭）。
+    #[serde(default)]
+    pub fetch_attachments: bool,
 }
 
 fn default_true() -> bool {
@@ -114,8 +123,45 @@ impl Default for StoreSettings {
             detail_limit: default_detail_limit(),
             notify: true,
             webvpn: WebvpnSettings::default(),
+            date_range_start: String::new(),
+            date_range_end: String::new(),
+            fetch_attachments: false,
         }
     }
+}
+
+/// 附件记录（store.json 的 attachments[]；按 normUrl 全局唯一，noticeIds 支持共享）。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentRecord {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub notice_ids: Vec<String>,
+    /// 取 Cookie 用（对应 SourceRecord.cookie）。
+    #[serde(default)]
+    pub source_id: String,
+    /// 绝对原始 URL（网关还原后），供「打开原网页」。
+    #[serde(default)]
+    pub source_url: String,
+    /// 规范化去重键（全局唯一）。
+    #[serde(default)]
+    pub norm_url: String,
+    /// 清洗后的展示文件名。
+    #[serde(default)]
+    pub file_name: String,
+    /// 相对 attachments 目录：`<stem>_<hash8>.<ext>`。
+    #[serde(default)]
+    pub local_path: String,
+    #[serde(default)]
+    pub status: AttachmentStatus,
+    #[serde(default)]
+    pub size_bytes: u64,
+    #[serde(default)]
+    pub fetched_at: String,
+    /// 失败原因（截断 300 字）。
+    #[serde(default)]
+    pub error: String,
 }
 
 /// 数据源记录（store.json 的 sources[]，含登录态 Cookie——仅本地存储，state() 只回 hasCookie）。
@@ -255,6 +301,10 @@ pub struct NoticeRecord {
     pub relevant: bool,
     #[serde(default)]
     pub ai: bool,
+    /// 最近一次为该通知扫描附件的时间（RFC3339，空 = 从未扫描）。
+    /// 负缓存：已扫描过但无附件的老通知不再每轮占用附件补抓名额（T06b）。
+    #[serde(default)]
+    pub attachments_scanned_at: String,
 }
 
 impl Default for NoticeRecord {
@@ -281,6 +331,7 @@ impl Default for NoticeRecord {
             read: false,
             relevant: true,
             ai: false,
+            attachments_scanned_at: String::new(),
         }
     }
 }
@@ -380,6 +431,8 @@ pub struct StoreData {
     #[serde(default)]
     pub items: Vec<ItemRecord>,
     #[serde(default)]
+    pub attachments: Vec<AttachmentRecord>,
+    #[serde(default)]
     pub meta: StoreMeta,
 }
 
@@ -395,6 +448,7 @@ impl Default for StoreData {
             sources: default_sources(),
             notices: Vec::new(),
             items: Vec::new(),
+            attachments: Vec::new(),
             meta: StoreMeta::default(),
         }
     }
@@ -445,6 +499,7 @@ impl StoreData {
         }
         base.notices = raw.notices;
         base.items = raw.items;
+        base.attachments = raw.attachments;
         base.meta = StoreMeta {
             last_poll_at: raw.meta.last_poll_at,
             last_poll_error: raw.meta.last_poll_error,

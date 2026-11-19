@@ -16,6 +16,6 @@ pub use dto::{
 };
 pub use error::{AuthError, AuthErrorCode};
 pub use state::{
-    AccountDto, ActionResult, MetaDto, NoticeDto, PreviewItem, ReminderDto, SettingsDto, SourceDto,
-    StateDto, StateItemDto, StatusDto, WebvpnDto,
+    AccountDto, ActionResult, AttachmentDto, AttachmentStatus, MetaDto, NoticeDto, PreviewItem,
+    ReminderDto, SettingsDto, SourceDto, StateDto, StateItemDto, StatusDto, WebvpnDto,
 };

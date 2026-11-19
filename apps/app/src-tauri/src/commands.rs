@@ -219,6 +219,31 @@ pub async fn llm_test(
     Ok(result)
 }
 
+/// `open_attachment`：打开本地附件（仅允许数据目录下的文件，防任意路径打开）。
+#[tauri::command]
+pub fn open_attachment(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    let target = std::path::PathBuf::from(&path);
+    // 规范化后必须仍在 <data_dir>/attachments 之下，防止越权打开任意文件。
+    let base = state.data_dir.join("attachments");
+    let canonical_target = target
+        .canonicalize()
+        .map_err(|_| "附件不存在或已被移动".to_string())?;
+    let canonical_base = base
+        .canonicalize()
+        .unwrap_or_else(|_| base.clone());
+    if !canonical_target.starts_with(&canonical_base) {
+        return Err("只允许打开附件目录下的文件".to_string());
+    }
+    tauri_plugin_opener::open_path(canonical_target.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("打开失败：{e}"))?;
+    log_line(&app, "info", "已打开本地附件");
+    Ok(())
+}
+
 /// `export_data`：导出 store.json（剥离 Cookie/密钥——S1/S2 口径的"不含密钥"）。
 #[tauri::command]
 pub async fn export_data(

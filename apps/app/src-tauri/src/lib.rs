@@ -22,7 +22,7 @@ use tauri_plugin_autostart::MacosLauncher;
 
 use cn_model::SystemClock;
 use cn_net::ReqwestFetcher;
-use cn_store::CampusService;
+use cn_store::{AppEvent, CampusService};
 
 use crate::auth::{AuthManager, AuthState};
 use crate::commands::FixedNow;
@@ -162,6 +162,55 @@ pub fn run() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
+            // 事件桥接：cn-store 的 AppEvent → Tauri 事件（设计 §3.3）。
+            // 逐项核对：
+            // - AttachmentProgress → `attachment://progress`（前端状态行「正在下载附件 x/y」）；
+            // - Reminder           → `reminder://fired`（前端重拉 state 并重绘提醒）；
+            // - Log                → `log://line`（脱敏后转发，与 crate::log_line 同格式）；
+            // - StateChanged       → **刻意跳过**：commands.rs 的 emit_state_changed 已在 act 后
+            //   广播完整 state（版本号单调），若此处再发同名事件会双发且 handler 内无法安全
+            //   再锁 service 组装 StateDto（死锁），故由既有路径唯一负责。
+            // 注：handler 在 CampusService 持锁期间被调用，只能做 app.emit，绝不回读 service。
+            {
+                let emitter = app.handle().clone();
+                let event_state = app.state::<AppState>();
+                let mut svc = event_state.service.blocking_lock();
+                svc.set_event_handler(Box::new(move |event| match event {
+                    AppEvent::AttachmentProgress {
+                        done,
+                        total,
+                        file_name,
+                    } => {
+                        // 最后一条（done == total）发 done：前端据此清除状态行与进度条，
+                        // 否则状态行会停在「正在下载附件 5/5」。
+                        let phase = if *total > 0 && *done >= *total {
+                            "done"
+                        } else {
+                            "tick"
+                        };
+                        let _ = emitter.emit(
+                            "attachment://progress",
+                            serde_json::json!({
+                                "phase": phase,
+                                "done": done,
+                                "total": total,
+                                "fileName": file_name,
+                            }),
+                        );
+                    }
+                    AppEvent::Reminder { title, label } => {
+                        let _ = emitter.emit(
+                            "reminder://fired",
+                            serde_json::json!({ "title": title, "label": label }),
+                        );
+                    }
+                    AppEvent::Log { text } => {
+                        let line = redact::LogLine::new("info", text);
+                        let _ = emitter.emit("log://line", &line);
+                    }
+                    AppEvent::StateChanged { .. } => {}
+                }));
+            }
             // 托盘（#[cfg(desktop)] 语义：本期只做 Windows 桌面）。
             setup_tray(app)?;
             // 启动后台调度：15s 提醒心跳 + 按 pollMinutes 抓取 + 状态广播。
@@ -185,6 +234,7 @@ pub fn run() {
             commands::auth_cancel,
             commands::auth_import_cookie,
             commands::llm_test,
+            commands::open_attachment,
             commands::export_data,
             commands::import_data,
         ])

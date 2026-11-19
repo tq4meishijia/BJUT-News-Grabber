@@ -255,3 +255,79 @@ pub fn parse_feed_date(raw: &str, now: DateTime<Local>) -> String {
     }
     String::new()
 }
+
+/* ---------------------- 抓取时间范围（纯逻辑，不读时钟） ---------------------- */
+
+/// 日期格式非法时的统一提示（对齐 PRD §4.1）。
+pub const INVALID_DATE_MESSAGE: &str = "日期格式不正确，请选择有效日期（YYYY-MM-DD）";
+/// 起止倒置时的统一提示。
+pub const START_AFTER_END_MESSAGE: &str = "开始日期不能晚于结束日期";
+/// 开始日期在未来时的统一提示。
+pub const START_AFTER_TODAY_MESSAGE: &str = "开始日期不能晚于今天";
+
+/// 已校验并 clamp 的闭区间 `[start, end]`；任一端空表示不限制该端。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DateRange {
+    pub start: String,
+    pub end: String,
+}
+
+/// 只做形状检查：长度 10、两个横杠、其余全为 ASCII 数字。
+/// 日历有效性（如 `2024-13-40`）由 [`validate_range`] 用 `NaiveDate` 复核。
+pub fn is_iso_day(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit())
+}
+
+fn is_real_day(s: &str) -> bool {
+    is_iso_day(s) && NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
+/// `published_at` 是否落在范围内。空值或无法解析的值一律保留（宁可保留不误丢）。
+pub fn in_date_range(published_at: &str, range: &DateRange) -> bool {
+    if !is_real_day(published_at) {
+        return true;
+    }
+    if !range.start.is_empty() && published_at < range.start.as_str() {
+        return false;
+    }
+    if !range.end.is_empty() && published_at > range.end.as_str() {
+        return false;
+    }
+    true
+}
+
+/// 校验起止日期并把 `end > today` clamp 到今天。`today` 由调用方注入（本 crate 不读时钟）。
+///
+/// 返回的错误文案与 PRD §4.1 逐字一致，调用方直接用于 `result_err`。
+pub fn validate_range(start: &str, end: &str, today: &str) -> Result<DateRange, String> {
+    let start = start.trim();
+    let end = end.trim();
+    if !start.is_empty() && !is_real_day(start) {
+        return Err(INVALID_DATE_MESSAGE.to_string());
+    }
+    if !end.is_empty() && !is_real_day(end) {
+        return Err(INVALID_DATE_MESSAGE.to_string());
+    }
+    if !start.is_empty() && !end.is_empty() && start > end {
+        return Err(START_AFTER_END_MESSAGE.to_string());
+    }
+    if !start.is_empty() && is_real_day(today) && start > today {
+        return Err(START_AFTER_TODAY_MESSAGE.to_string());
+    }
+    let end = if !end.is_empty() && is_real_day(today) && end > today {
+        today.to_string()
+    } else {
+        end.to_string()
+    };
+    Ok(DateRange {
+        start: start.to_string(),
+        end,
+    })
+}

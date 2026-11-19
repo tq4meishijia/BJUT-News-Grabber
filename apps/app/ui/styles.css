@@ -12,6 +12,12 @@
   --warn: #b9761a;
   --shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
   --radius: 12px;
+  /* 统一动效 token：时长与缓动（轻量、短促，避免拖沓） */
+  --dur-1: 110ms; /* 微交互：hover / 按压 */
+  --dur-2: 180ms; /* 常规过渡：展开、视图切换 */
+  --dur-3: 320ms; /* 较大变化：骨架 → 内容 */
+  --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
+  --ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -359,6 +365,20 @@ a {
   border-radius: 7px;
 }
 
+/* 快捷项选中态：只用现有变量做强调（浅色/深色正文对比均 ≥4.5:1，不新造颜色） */
+.btn.small.is-active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+  font-weight: 600;
+}
+
+.btn.small.is-active:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
 input,
 textarea,
 select {
@@ -397,6 +417,14 @@ label.field {
 
 label.field > span {
   flex: 0 0 auto;
+}
+
+/* 快捷时间范围：组内 8px，与下方字段行的间距交给父级 .card 的 flex gap（不再叠 margin） */
+.range-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .field-row {
@@ -519,6 +547,13 @@ label.field > span {
   font-size: 13px;
   line-height: 1.8;
   white-space: pre-wrap;
+}
+
+/* 列表「显示更多」：居中，与卡片同列宽节奏（不新造字号/颜色） */
+.list-more {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
 }
 
 .error-bar {
@@ -651,6 +686,70 @@ label.field > span {
   width: min(520px, calc(100vw - 32px));
   padding: 22px;
 }
+
+/* 抓取时间范围浮窗（复用 wizard-overlay / card） */
+.poll-range-card {
+  width: min(440px, calc(100vw - 32px));
+  padding: 22px;
+  gap: 12px;
+}
+.poll-range-card h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.poll-range-card .field-row > label.field {
+  flex: 1 1 160px;
+}
+
+/* ------------------------------- 附件区块 ------------------------------- */
+
+.attachments {
+  margin-top: 4px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.attachments-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  margin-bottom: 7px;
+  letter-spacing: 0.2px;
+}
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+.attachment-row:first-of-type {
+  border-top: none;
+}
+.attachment-name {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  word-break: break-all;
+}
+.attachment-size {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.attachment-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.attachment-error {
+  font-size: 11.5px;
+  color: var(--danger);
+  flex: 1 1 100%;
+}
 .wizard h2 {
   margin: 10px 0 6px;
   font-size: 20px;
@@ -750,5 +849,216 @@ label.field > span {
   }
   .actions {
     flex-wrap: wrap;
+  }
+}
+
+/* =================== 统一动效与进度反馈 =================== */
+
+/* ---- 按钮：悬停微升 + 按压缩放（仅 transform/阴影，不影响布局） ---- */
+.btn {
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out),
+    opacity var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.08);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.975);
+  box-shadow: none;
+  transition-duration: 60ms;
+}
+
+.btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---- 按钮处理中：spinner + 禁用视觉（文案由 JS 切换） ---- */
+.btn.is-busy {
+  position: relative;
+  cursor: progress;
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.btn.is-busy::after {
+  content: '';
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 6px;
+  vertical-align: -1px;
+  border: 1.6px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 620ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 骨架屏：首次加载与列表占位 ---- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--panel-2) 25%,
+    color-mix(in srgb, var(--panel-2) 55%, var(--border)) 37%,
+    var(--panel-2) 63%
+  );
+  background-size: 400% 100%;
+  border-radius: 6px;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+.skeleton-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.skeleton-line {
+  height: 11px;
+}
+
+.skeleton-line.w60 {
+  width: 60%;
+}
+
+.skeleton-line.w85 {
+  width: 85%;
+}
+
+.skeleton-line.w40 {
+  width: 40%;
+}
+
+/* ---- 视图切换：轻微淡入上移（不改布局，不遮挡内容） ---- */
+.view.view-enter {
+  animation: view-in var(--dur-2) var(--ease-out);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- 抓取进度条：有具体进度时平滑推进，无进度时不确定态 ---- */
+.poll-progress.is-indeterminate i {
+  width: 34%;
+  transition: none;
+  animation: poll-indeterminate 1.15s var(--ease-out) infinite;
+}
+
+@keyframes poll-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(330%);
+  }
+}
+
+/* ---- toast：入场已有动效，补退出淡出 ---- */
+.toast {
+  animation: toast-in var(--dur-2) var(--ease-spring);
+}
+
+.toast.toast-leaving {
+  animation: toast-out 140ms var(--ease-out) forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+}
+
+/* ---- 浮层入场（登录向导 / 时间范围弹窗） ---- */
+.wizard-overlay:not([hidden]) .card {
+  animation: dialog-in var(--dur-2) var(--ease-out);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- 列表项状态变化：已读/删除时的柔和过渡 ---- */
+.notice {
+  transition: opacity var(--dur-2) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+
+/* ---- 减少动画偏好：保留功能，去掉位移与循环动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .btn:hover:not(:disabled),
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  .skeleton {
+    animation: none;
+    background: var(--panel-2);
   }
 }

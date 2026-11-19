@@ -8,6 +8,7 @@ import {
   authWebvpnLogin,
   listenTauri,
   openExternal,
+  openAttachment,
   notifySystem,
 } from './api.js'
 
@@ -77,15 +78,139 @@ function scoreTone(score) {
   return 'var(--muted)'
 }
 
+/* --------------------------- 日期范围 / 附件 --------------------------- */
+
+/** 本地日期 YYYY-MM-DD（与后端 clock 的 today 口径一致）。 */
+function todayIso() {
+  const now = new Date()
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+}
+
+/** 今天往前推 n 天（走本地日历，避开 UTC 换算导致的跨时区差一天）。 */
+function isoDaysAgo(days) {
+  const now = new Date()
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - Number(days))
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+/** 快捷区间：近 N 天 = 今天往前 (N-1) 天 至今（含首尾共 N 天）。 */
+function presetRange(days) {
+  const amount = Number(days)
+  if (!Number.isFinite(amount) || amount < 1) return null
+  return { start: isoDaysAgo(amount - 1), end: todayIso() }
+}
+
+/**
+ * 按输入框当前值判定命中的快捷项。
+ * 规则：两端都空 → ''（全部不激活）；end 为空或等于今天且 start 等于 N 天前 → 'N'；其余 → 'custom'。
+ */
+function matchRangePreset(start, end) {
+  const s = String(start || '').trim()
+  const e = String(end || '').trim()
+  if (!s && !e) return ''
+  if (e && e !== todayIso()) return 'custom'
+  for (const days of [7, 30, 90]) {
+    if (s === presetRange(days).start) return String(days)
+  }
+  return 'custom'
+}
+
+/** 应用快捷区间：只填输入框，绝不触发抓取（避免误触）。custom 只把焦点交回开始日期。 */
+function applyRangePreset(days, startEl, endEl) {
+  if (days === 'custom' || days == null) {
+    startEl?.focus()
+    return
+  }
+  const range = presetRange(days)
+  if (!range) return
+  if (startEl) startEl.value = range.start
+  if (endEl) endEl.value = range.end
+}
+
+/**
+ * 刷新快捷按钮的选中态（is-active + aria-pressed）。
+ * scope：'poll' 抓取浮窗（静态 DOM，需手动刷）｜'settings' 设置页（值来自 drafts）。
+ */
+function syncRangePresetState(scope) {
+  const isPoll = scope !== 'settings'
+  const root = isPoll ? $('#poll-range-dialog') : $('#view')
+  if (!root) return
+  const act = isPoll ? 'poll-range-preset' : 'settings-range-preset'
+  const start = isPoll ? $('#poll-range-start')?.value : drafts.settings?.dateRangeStart
+  const end = isPoll ? $('#poll-range-end')?.value : drafts.settings?.dateRangeEnd
+  const active = matchRangePreset(start, end)
+  for (const button of root.querySelectorAll(`[data-act="${act}"]`)) {
+    const on = button.dataset.days === active
+    button.classList.toggle('is-active', on)
+    button.setAttribute('aria-pressed', on ? 'true' : 'false')
+  }
+}
+
+/** 严格判断 YYYY-MM-DD，含真实日历校验（如 2024-13-40 判非法）。 */
+function isIsoDay(text) {
+  const value = String(text || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  return (
+    date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+  )
+}
+
+/**
+ * 与后端 validate_range 同规则、同文案的前端校验（PRD §4.1）。
+ * 仅填一端合法；end > today 合法但返回 soft 轻提示。
+ * @returns {{ ok: boolean, error: string, soft: string }}
+ */
+function validateDateRange(start, end) {
+  const s = String(start || '').trim()
+  const e = String(end || '').trim()
+  const badFormat = '日期格式不正确，请选择有效日期（YYYY-MM-DD）'
+  if (s && !isIsoDay(s)) return { ok: false, error: badFormat, soft: '' }
+  if (e && !isIsoDay(e)) return { ok: false, error: badFormat, soft: '' }
+  if (s && e && s > e) return { ok: false, error: '开始日期不能晚于结束日期', soft: '' }
+  const today = todayIso()
+  if (s && s > today) return { ok: false, error: '开始日期不能晚于今天', soft: '' }
+  const soft = e && e > today ? '结束日期晚于今天，将按今天作为上限' : ''
+  return { ok: true, error: '', soft }
+}
+
+/** 字节数格式化为 B / KB / MB。 */
+function fmtSize(bytes) {
+  const value = Number(bytes) || 0
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** 附件状态 → 徽标 + 操作入口（与后端 AttachmentStatus 四态对齐）。 */
+const ATTACHMENT_STATUS = {
+  downloaded: { label: '已下载', cls: 'ok', act: 'attachment-open', action: '打开' },
+  missing: { label: '缺失', cls: 'warn', act: 'attachment-retry', action: '重试' },
+  failed: { label: '失败', cls: 'danger', act: 'attachment-retry', action: '重试' },
+  tooLarge: { label: '过大', cls: 'warn', act: 'attachment-source', action: '打开原网页' },
+}
+
 /* ------------------------------ 状态 ------------------------------ */
 
 let state = null
 let tab = 'notices'
+/** 上一次已渲染的标签：仅切换时播放视图进入动画，状态刷新不重复动画。 */
+let lastRenderedTab = ''
 let noticeFilter = 'all'
+const NOTICE_PAGE_FIRST = 100
+const NOTICE_PAGE_MORE = 200
+/**
+ * 通知列表已渲染条数：首屏 100，每次「显示更多」+200（全量可达千条，不能一次进 DOM）。
+ * 只在切 tab / 换筛选 / 点「显示更多」时变；已读、展开等状态刷新不动它。
+ */
+let noticeLimit = NOTICE_PAGE_FIRST
 let showDone = false
 let openAdd = false
 let openSourceAdd = false
 let lastError = ''
+/** 附件下载进度：null 表示未在下载；否则 { done, total, fileName }。 */
+let attachmentProgress = null
 const expandedNotices = new Set()
 
 const drafts = {
@@ -147,8 +272,34 @@ async function api(op, payload = {}, options = {}) {
   }
 }
 
+/**
+ * 让按钮在异步操作期间进入「处理中」态：禁用 + spinner + 文案替换，结束后恢复。
+ * 所有耗时提交都走这里，避免慢响应下重复点击与「点了没反应」的错觉。
+ * @param {HTMLButtonElement|null} button 触发按钮
+ * @param {string} busyLabel 处理中显示的文案（空串则保留原文案只加 spinner）
+ * @param {() => Promise<any>} task 实际操作
+ */
+async function withBusy(button, busyLabel, task) {
+  if (!button || button.dataset.busy === '1') return undefined
+  const originalText = button.textContent
+  const originalDisabled = button.disabled
+  button.dataset.busy = '1'
+  button.classList.add('is-busy')
+  button.disabled = true
+  if (busyLabel) button.textContent = busyLabel
+  try {
+    return await task()
+  } finally {
+    button.dataset.busy = ''
+    button.classList.remove('is-busy')
+    button.disabled = originalDisabled
+    button.textContent = originalText
+  }
+}
+
 /* state://changed 版本号门槛：只应用更大版本 */
 let appliedVersion = 0
+
 function applyState(next, version) {
   if (!next) return
   if (typeof version === 'number') {
@@ -166,22 +317,31 @@ function pushToast(kind, title, note, ttl = 8000) {
   const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   toasts.push({ id, kind, title, note })
   renderToasts()
-  setTimeout(() => {
-    const index = toasts.findIndex((entry) => entry.id === id)
-    if (index >= 0) toasts.splice(index, 1)
-    renderToasts()
-  }, ttl)
+  setTimeout(() => dismissToast(id), ttl)
 }
 
 function toast(kind, title, note, ttl) {
   pushToast(kind, title, note, ttl)
 }
 
+/** 关闭 toast：先播退出动画再移除，避免列表瞬间塌陷。 */
+function dismissToast(id) {
+  const el = document.querySelector(`.toast[data-toast-id="${id}"]`)
+  const finish = () => {
+    const index = toasts.findIndex((entry) => entry.id === id)
+    if (index >= 0) toasts.splice(index, 1)
+    renderToasts()
+  }
+  if (!el || el.classList.contains('toast-leaving')) return finish()
+  el.classList.add('toast-leaving')
+  setTimeout(finish, 150)
+}
+
 function renderToasts() {
   $('#toasts').innerHTML = toasts
     .map(
       (entry) => `
-    <div class="toast ${entry.kind}">
+    <div class="toast ${entry.kind}" data-toast-id="${entry.id}">
       <div style="flex:1;min-width:0">
         <strong>${esc(entry.title)}</strong>
         ${entry.note ? `<span>${esc(entry.note)}</span>` : ''}
@@ -215,7 +375,10 @@ function handleReminders() {
 /* ------------------------------ 渲染 ------------------------------ */
 
 function render(force = false) {
-  if (!state) return
+  if (!state) {
+    renderSkeleton()
+    return
+  }
   if (!force && typing()) return
   const unread = state.notices.filter((notice) => !notice.read).length
   const activeItems = state.items.filter((item) => !item.done).length
@@ -225,11 +388,15 @@ function render(force = false) {
     return due ? due.getTime() - Date.now() <= 86400000 : false
   }).length
 
-  $('#status-line').textContent = state.meta.lastPollAt
+  const baseStatus = state.meta.lastPollAt
     ? `上次抓取 ${String(state.meta.lastPollAt).replace('T', ' ').slice(5, 16)} · 每 ${state.settings.pollMinutes} 分钟自动抓一次${
         dueSoon ? ` · ${dueSoon} 项 24 小时内到期` : ''
       }`
     : `还没抓取过 · 每 ${state.settings.pollMinutes} 分钟自动抓一次`
+  // 附件下载进度优先显示在状态行（attachment://progress done 后清除）
+  $('#status-line').textContent = attachmentProgress
+    ? `正在下载附件 ${attachmentProgress.done}/${attachmentProgress.total}`
+    : baseStatus
 
   $('#tabs').innerHTML = [
     { key: 'notices', label: `通知${unread ? ` ${unread}` : ''}` },
@@ -258,6 +425,30 @@ function render(force = false) {
           ? viewSources()
           : viewSettings())
   view.scrollTop = scroll
+  delete view.dataset.skeleton
+  // 仅在切换标签时播放进入动画：状态刷新（每次 api 后都会 render）不该反复闪动
+  if (lastRenderedTab !== tab) {
+    lastRenderedTab = tab
+    view.classList.remove('view-enter')
+    void view.offsetWidth // 强制重排，确保动画可重触发
+    view.classList.add('view-enter')
+  }
+}
+
+/** 首次读取数据前的骨架占位（避免白屏，加载完成后由 render 覆盖）。 */
+function renderSkeleton() {
+  const view = $('#view')
+  if (!view || view.dataset.skeleton === '1') return
+  view.dataset.skeleton = '1'
+  view.innerHTML = Array.from({ length: 3 })
+    .map(
+      () => `<div class="skeleton-card" aria-hidden="true">
+        <div class="skeleton skeleton-line w60"></div>
+        <div class="skeleton skeleton-line w85"></div>
+        <div class="skeleton skeleton-line w40"></div>
+      </div>`,
+    )
+    .join('')
 }
 
 function viewNotices() {
@@ -269,6 +460,10 @@ function viewNotices() {
     if (noticeFilter === 'important') return (notice.score || 0) >= 55
     return true
   })
+  // 计数与筛选永远基于全量 list；只有 DOM 渲染分段（首屏 100，之后每次 +200）。
+  const visible = list.slice(0, noticeLimit)
+  const rest = list.length - visible.length
+  const attachmentIndex = indexAttachmentsByNotice(state.attachments)
   const chip = (key, label) =>
     `<button class="btn small ${noticeFilter === key ? 'primary' : 'ghost'}" data-act="filter" data-filter="${key}">${esc(label)}</button>`
 
@@ -281,8 +476,11 @@ function viewNotices() {
       <button class="btn small ghost" data-act="notice-read-all" ${notices.length ? '' : 'disabled'}>全部标已读</button>
     </div>
     ${
-      list.length
-        ? list.map(noticeCard).join('')
+      visible.length
+        ? visible.map((notice) => noticeCard(notice, attachmentIndex)).join('') +
+          (rest > 0
+            ? `<div class="list-more"><button class="btn small primary" data-act="notice-show-more">显示更多（剩余 ${rest} 条）</button></div>`
+            : '')
         : `<div class="empty">${
             notices.length
               ? '当前筛选下没有通知。'
@@ -291,7 +489,61 @@ function viewNotices() {
     }`
 }
 
-function noticeCard(notice) {
+/**
+ * 附件按通知 id 建索引，O(附件数)。
+ * 全量通知下不能每条通知都 filter 一遍全表（1000×1000 会明显卡顿）；
+ * 一条附件的 noticeIds 可能挂多条通知，所以一条附件可以进多个桶。
+ * @returns {Map<string, object[]>}
+ */
+function indexAttachmentsByNotice(attachments) {
+  const index = new Map()
+  for (const item of Array.isArray(attachments) ? attachments : []) {
+    for (const noticeId of item.noticeIds || []) {
+      const bucket = index.get(noticeId)
+      if (bucket) bucket.push(item)
+      else index.set(noticeId, [item])
+    }
+  }
+  return index
+}
+
+/**
+ * 渲染单条通知的「附件(N)」区块：从调用方建好的索引里按 notice.id 取桶。
+ * 无附件时返回空串。四态操作入口：打开本地 / 重试 / 打开原网页。
+ * @param {{id: string}} notice
+ * @param {Map<string, object[]>} [attachmentIndex] viewNotices() 建好的索引；不传则就地建（仅兜底）
+ */
+function noticeAttachments(notice, attachmentIndex) {
+  const list = (attachmentIndex || indexAttachmentsByNotice(state.attachments)).get(notice.id) || []
+  if (!list.length) return ''
+  const rows = list
+    .map((item) => {
+      const spec = ATTACHMENT_STATUS[item.status] || {
+        label: item.status || '未知',
+        cls: '',
+        act: '',
+        action: '',
+      }
+      const size = item.status === 'downloaded' ? `<span class="attachment-size">${fmtSize(item.sizeBytes)}</span>` : ''
+      const action = spec.act
+        ? `<span class="attachment-actions"><button class="btn small ghost" data-act="${spec.act}" data-id="${esc(item.id)}" data-notice="${esc(notice.id)}">${esc(spec.action)}</button></span>`
+        : ''
+      const error = item.error && (item.status === 'failed' || item.status === 'missing')
+        ? `<div class="attachment-error">${esc(item.error)}</div>`
+        : ''
+      return `<div class="attachment-row">
+        <span class="attachment-name" title="${esc(item.fileName || item.sourceUrl)}">${esc(item.fileName || item.sourceUrl || '附件')}</span>
+        <span class="chip ${spec.cls}">${esc(spec.label)}</span>
+        ${size}
+        ${action}
+        ${error}
+      </div>`
+    })
+    .join('')
+  return `<div class="attachments"><div class="attachments-title">附件（${list.length}）</div>${rows}</div>`
+}
+
+function noticeCard(notice, attachmentIndex) {
   const tags = (notice.tags || [])
     .slice(0, 4)
     .map((tag) => `<span class="chip">${esc(tag)}</span>`)
@@ -329,6 +581,7 @@ function noticeCard(notice) {
           }
         </div>
       </div>
+      ${noticeAttachments(notice, attachmentIndex)}
       <div class="actions">
         ${
           hasBody
@@ -570,16 +823,32 @@ function viewSettings() {
       accountUser: (state.meta?.account?.username || '').toString(),
       accountPassword: '',
       webvpnCookie: '',
+      dateRangeStart: (settings.dateRangeStart || '').toString(),
+      dateRangeEnd: (settings.dateRangeEnd || '').toString(),
     }
   }
   const draft = drafts.settings
   const meta = state.meta || {}
+  const rangePreset = matchRangePreset(draft.dateRangeStart, draft.dateRangeEnd)
+  const presetButton = (days, label) => {
+    const on = rangePreset === String(days)
+    return `<button type="button" class="btn small ghost${on ? ' is-active' : ''}" data-act="settings-range-preset" data-days="${days}" aria-pressed="${on}">${label}</button>`
+  }
   return `
     <div class="card">
       <div class="field-row">
         <label class="field"><span>抓取间隔（分钟，最小 5）</span><input data-scope="settings" data-field="minutes" value="${esc(draft.minutes)}" /></label>
         <label class="field"><span>自动建日程的提醒档位（分钟）</span><input data-scope="settings" data-field="remind" value="${esc(draft.remind)}" placeholder="1440,120" /></label>
       </div>
+      <div class="range-presets" role="group" aria-label="默认抓取范围快捷选择">
+        ${presetButton(7, '近 7 天')}${presetButton(30, '近 30 天')}${presetButton(90, '近 90 天')}${presetButton('custom', '自定义')}
+      </div>
+      <div class="field-row">
+        <label class="field"><span>默认抓取起始日期</span><input type="date" data-scope="settings" data-field="dateRangeStart" value="${esc(draft.dateRangeStart)}" /></label>
+        <label class="field"><span>默认抓取结束日期</span><input type="date" data-scope="settings" data-field="dateRangeEnd" value="${esc(draft.dateRangeEnd)}" /></label>
+      </div>
+      <div class="row"><button class="btn small ghost" data-act="settings-clear-range">清除日期范围</button></div>
+      <div class="hint">两端留空表示不限制；仅抓取发布日期落在区间内的通知。此处为默认值，抓取时可在浮窗临时覆盖。</div>
       <label class="field"><span>关注关键词（顿号或逗号分隔，命中越多越重要）</span><textarea data-scope="settings" data-field="keywords">${esc(draft.keywords)}</textarea></label>
       <div class="actions">
         <button class="btn primary" data-act="settings-save">保存设置</button>
@@ -588,6 +857,7 @@ function viewSettings() {
 
     <div class="section-title">行为</div>
     <div class="card">
+      <label class="switch"><input type="checkbox" data-act="toggle-attach" ${state.settings.fetchAttachments ? 'checked' : ''} />自动抓取附件（白名单文件下载到本地，删除通知时一并清理）</label>
       <label class="switch"><input type="checkbox" data-act="toggle-llm" ${state.settings.llm ? 'checked' : ''} />新通知用 AI 摘要（关掉后走规则摘要）</label>
       <label class="switch"><input type="checkbox" data-act="llm-consent" ${localStorage.getItem('llmConsentAt') ? 'checked' : ''} />我已知晓：开启 AI 后通知正文将发送至配置的模型服务（llm.baseURL）用于摘要与分类，日志不含正文（§6.4）</label>
       <label class="switch"><input type="checkbox" data-act="toggle-autoschedule" ${state.settings.autoSchedule ? 'checked' : ''} />通知里识别到截止时间时，自动建成日程</label>
@@ -702,13 +972,19 @@ function readDrafts(scope, field, value, id) {
 document.addEventListener('input', (event) => {
   const el = event.target.closest('[data-scope]')
   if (!el) return
-  readDrafts(el.dataset.scope, el.dataset.field, el.value, el.dataset.id)
+  const value = el.type === 'checkbox' ? el.checked : el.value
+  readDrafts(el.dataset.scope, el.dataset.field, value, el.dataset.id)
 })
 
 document.addEventListener('change', (event) => {
   const el = event.target.closest('[data-scope]')
   if (el) {
-    readDrafts(el.dataset.scope, el.dataset.field, el.value, el.dataset.id)
+    const value = el.type === 'checkbox' ? el.checked : el.value
+    readDrafts(el.dataset.scope, el.dataset.field, value, el.dataset.id)
+    // 手动改默认抓取日期 = 自定义：只刷快捷项选中态，不落库、不重渲染（避免打断输入）
+    if (el.dataset.scope === 'settings' && /^dateRange(Start|End)$/.test(el.dataset.field || '')) {
+      syncRangePresetState('settings')
+    }
     return
   }
   const toggle = event.target.closest('input[type="checkbox"][data-act]')
@@ -741,6 +1017,8 @@ document.addEventListener('change', (event) => {
     api('settings.save', { settings: { autoSchedule: toggle.checked } }, { quiet: true })
   } else if (act === 'toggle-detail') {
     api('settings.save', { settings: { fetchDetail: toggle.checked } }, { quiet: true })
+  } else if (act === 'toggle-attach') {
+    api('settings.save', { settings: { fetchAttachments: toggle.checked } }, { quiet: true })
   } else if (act === 'toggle-notify') {
     api('settings.save', { settings: { notify: toggle.checked } }, { quiet: true })
   } else if (act === 'item-done') {
@@ -757,21 +1035,115 @@ document.addEventListener('click', async (event) => {
   switch (act) {
     case 'tab':
       tab = button.dataset.tab
+      // 切 tab 回到首屏 100 条：换到通知页时不该继承上一次"显示更多"的深度
+      noticeLimit = NOTICE_PAGE_FIRST
       render(true)
       break
     case 'filter':
       noticeFilter = button.dataset.filter
+      // 筛选取的是另一批数据，已渲染深度在这里没有意义，回到 100
+      noticeLimit = NOTICE_PAGE_FIRST
       render(true)
       break
+    case 'notice-show-more':
+      noticeLimit += NOTICE_PAGE_MORE
+      render(true)
+      // 重渲染换掉了节点；按钮若还在就把焦点接回去，键盘用户不用再 Tab 到底
+      $('[data-act="notice-show-more"]')?.focus()
+      break
     case 'toast-close': {
-      const index = toasts.findIndex((entry) => entry.id === id)
-      if (index >= 0) toasts.splice(index, 1)
-      renderToasts()
+      dismissToast(id)
       break
     }
     case 'poll':
-      await api('poll', {}, { quiet: false })
+      openPollRange()
       break
+    case 'poll-range-cancel':
+      closePollRange()
+      break
+    case 'poll-range-clear': {
+      const startEl = $('#poll-range-start')
+      const endEl = $('#poll-range-end')
+      if (startEl) startEl.value = ''
+      if (endEl) endEl.value = ''
+      syncRangePresetState('poll')
+      break
+    }
+    case 'poll-range-preset':
+      // 快捷选择只填输入框，抓取仍由「开始抓取」确认，避免误触直接开跑。
+      applyRangePreset(button.dataset.days, $('#poll-range-start'), $('#poll-range-end'))
+      syncRangePresetState('poll')
+      break
+    case 'settings-range-preset': {
+      if (!drafts.settings) break
+      const days = button.dataset.days
+      if (days === 'custom') {
+        $('#view [data-field="dateRangeStart"]')?.focus()
+        break
+      }
+      const range = presetRange(days)
+      if (!range) break
+      // 只改草稿并重渲染，仍要用户点「保存设置」才落库。
+      drafts.settings.dateRangeStart = range.start
+      drafts.settings.dateRangeEnd = range.end
+      render(true)
+      // 重渲染会换掉节点，把焦点交回同一快捷项，键盘流程不中断
+      $(`#view [data-act="settings-range-preset"][data-days="${days}"]`)?.focus()
+      break
+    }
+    case 'poll-range-confirm': {
+      const start = ($('#poll-range-start')?.value || '').trim()
+      const end = ($('#poll-range-end')?.value || '').trim()
+      const check = validateDateRange(start, end)
+      if (!check.ok) {
+        toast('error', '日期范围不正确', check.error)
+        break
+      }
+      if (check.soft) toast('ok', '提示', check.soft)
+      closePollRange()
+      // 临时范围只随本次 poll 下发，绝不写回设置默认值。
+      // 抓取可能持续数十秒：顶部按钮进入处理中态，进度条走不确定态，避免「点了没反应」。
+      const pollBtn = $('#btn-poll')
+      const bar = $('#poll-progress')
+      pollBtn?.classList.add('is-busy')
+      if (bar) {
+        bar.hidden = false
+        bar.classList.add('is-indeterminate')
+      }
+      try {
+        await api('poll', { dateRange: { start, end } }, { quiet: false })
+      } finally {
+        pollBtn?.classList.remove('is-busy')
+        if (bar) {
+          bar.classList.remove('is-indeterminate')
+          bar.hidden = true
+        }
+      }
+      break
+    }
+    case 'attachment-open': {
+      const attachment = (state.attachments || []).find((entry) => entry.id === id)
+      const path = attachment?.localPath
+      if (!path) {
+        toast('error', '打不开附件', '本地路径不存在，可尝试重试')
+        break
+      }
+      try {
+        await openAttachment(path)
+      } catch (error) {
+        toast('error', '打不开附件', String(error?.message || error))
+      }
+      break
+    }
+    case 'attachment-retry':
+      await withBusy(button, '重试中…', () => api('attachment.retry', { id }, { quiet: false }))
+      break
+    case 'attachment-source': {
+      const attachment = (state.attachments || []).find((entry) => entry.id === id)
+      if (attachment?.sourceUrl) openExternal(attachment.sourceUrl)
+      else toast('error', '没有原网页地址', '该附件没有来源链接')
+      break
+    }
     case 'notice-open':
       api('notice.read', { id, read: true }, { quiet: true })
       break
@@ -784,15 +1156,13 @@ document.addEventListener('click', async (event) => {
       api('notice.read', { id, read: button.dataset.read === '1' }, { quiet: true })
       break
     case 'notice-read-all':
-      api('notice.readAll', {}, { quiet: true })
+      await withBusy(button, '处理中…', () => api('notice.readAll', {}, { quiet: true }))
       break
     case 'notice-remove':
-      api('notice.remove', { id }, { quiet: true })
+      await withBusy(button, '移除中…', () => api('notice.remove', { id }, { quiet: true }))
       break
     case 'notice-ai':
-      button.disabled = true
-      button.textContent = '摘要中…'
-      await api('notice.summarize', { id })
+      await withBusy(button, '摘要中…', () => api('notice.summarize', { id }))
       break
     case 'notice-schedule': {
       const notice = state.notices.find((entry) => entry.id === id)
@@ -817,15 +1187,17 @@ document.addEventListener('click', async (event) => {
       const draft = drafts.item
       if (!draft.title.trim()) return toast('error', '缺少标题', '先写清楚要做的事')
       if (!draft.dueAt) return toast('error', '缺少时间', '选一个截止时间')
-      const result = await api('item.add', {
-        title: draft.title,
-        dueAt: draft.dueAt,
-        note: draft.note,
-        remindBefore: draft.remind
-          .split(/[,，\s]+/)
-          .map(Number)
-          .filter((value) => Number.isFinite(value) && value >= 0),
-      })
+      const result = await withBusy(button, '添加中…', () =>
+        api('item.add', {
+          title: draft.title,
+          dueAt: draft.dueAt,
+          note: draft.note,
+          remindBefore: draft.remind
+            .split(/[,，\s]+/)
+            .map(Number)
+            .filter((value) => Number.isFinite(value) && value >= 0),
+        }),
+      )
       if (result?.ok) {
         drafts.item = { title: '', dueAt: '', note: '', remind: '1440,120' }
         openAdd = false
@@ -851,24 +1223,26 @@ document.addEventListener('click', async (event) => {
     case 'item-edit-save': {
       const draft = drafts.editItem[id]
       if (!draft) break
-      await api('item.update', {
-        id,
-        title: draft.title,
-        dueAt: draft.dueAt,
-        remindBefore: draft.remind
-          .split(/[,，\s]+/)
-          .map(Number)
-          .filter((value) => Number.isFinite(value) && value >= 0),
-      })
+      await withBusy(button, '保存中…', () =>
+        api('item.update', {
+          id,
+          title: draft.title,
+          dueAt: draft.dueAt,
+          remindBefore: draft.remind
+            .split(/[,，\s]+/)
+            .map(Number)
+            .filter((value) => Number.isFinite(value) && value >= 0),
+        }),
+      )
       delete drafts.editItem[id]
       render(true)
       break
     }
     case 'item-refire':
-      api('item.refire', { id }, { quiet: true })
+      await withBusy(button, '处理中…', () => api('item.refire', { id }, { quiet: true }))
       break
     case 'item-remove':
-      api('item.remove', { id }, { quiet: true })
+      await withBusy(button, '移除中…', () => api('item.remove', { id }, { quiet: true }))
       break
     case 'toggle-source-add':
       openSourceAdd = !openSourceAdd
@@ -877,14 +1251,16 @@ document.addEventListener('click', async (event) => {
     case 'source-add': {
       const draft = drafts.sourceAdd
       if (!/^https?:\/\//i.test(draft.url.trim())) return toast('error', '网址不对', '要以 http:// 或 https:// 开头')
-      const result = await api('source.add', {
-        name: draft.name,
-        url: draft.url,
-        type: draft.type,
-        cookie: draft.cookie,
-        resolveIp: draft.resolveIp,
-        sendToLlm: draft.sendToLlm !== false,
-      })
+      const result = await withBusy(button, '添加中…', () =>
+        api('source.add', {
+          name: draft.name,
+          url: draft.url,
+          type: draft.type,
+          cookie: draft.cookie,
+          resolveIp: draft.resolveIp,
+          sendToLlm: draft.sendToLlm !== false,
+        }),
+      )
       if (result?.ok) {
         drafts.sourceAdd = { name: '', url: '', type: 'html', cookie: '', resolveIp: '', note: '', sendToLlm: true }
         openSourceAdd = false
@@ -936,53 +1312,67 @@ document.addEventListener('click', async (event) => {
         sendToLlm: draft.sendToLlm !== false,
       }
       if (draft.cookie) payload.cookie = draft.cookie
-      await api('source.update', payload)
+      await withBusy(button, '保存中…', () => api('source.update', payload))
       delete drafts.editSource[id]
       render(true)
       break
     }
     case 'source-test':
-      button.disabled = true
-      button.textContent = '测试中…'
-      await api('source.test', { id })
+      await withBusy(button, '测试中…', () => api('source.test', { id }))
       break
     case 'source-remove':
-      api('source.remove', { id }, { quiet: true })
+      await withBusy(button, '移除中…', () => api('source.remove', { id }, { quiet: true }))
+      break
+    case 'settings-clear-range':
+      if (drafts.settings) {
+        drafts.settings.dateRangeStart = ''
+        drafts.settings.dateRangeEnd = ''
+      }
+      render(true)
+      toast('ok', '已清空日期范围', '点「保存设置」后生效（两端留空 = 不限时间）')
       break
     case 'settings-save': {
       const draft = drafts.settings
-      await api('settings.save', {
-        settings: {
-          pollMinutes: Number(draft.minutes),
-          keywords: draft.keywords.split(/[、,，\s]+/).map((word) => word.trim()).filter(Boolean),
-          autoRemindBefore: draft.remind
-            .split(/[,，\s]+/)
-            .map(Number)
-            .filter((value) => Number.isFinite(value) && value >= 0),
-        },
-      })
+      const check = validateDateRange(draft.dateRangeStart, draft.dateRangeEnd)
+      if (!check.ok) {
+        toast('error', '日期范围不正确', check.error)
+        break
+      }
+      if (check.soft) toast('ok', '提示', check.soft)
+      await withBusy(button, '保存中…', () =>
+        api('settings.save', {
+          settings: {
+            pollMinutes: Number(draft.minutes),
+            keywords: draft.keywords.split(/[、,，\s]+/).map((word) => word.trim()).filter(Boolean),
+            autoRemindBefore: draft.remind
+              .split(/[,，\s]+/)
+              .map(Number)
+              .filter((value) => Number.isFinite(value) && value >= 0),
+            dateRangeStart: (draft.dateRangeStart || '').trim(),
+            dateRangeEnd: (draft.dateRangeEnd || '').trim(),
+          },
+        }),
+      )
       break
     }
     case 'webvpn-login': {
-      button.disabled = true
-      button.textContent = '正在打开登录窗…'
-      try {
-        const ticket = await authWebvpnLogin()
-        // 先复位向导，再切到网关 scope；后端 auth://progress 会继续驱动状态。
-        openWizard()
-        wizard.ticket = ticket?.id || ''
-        wizard.scope = 'gateway'
-        wizard.mode = 'WebView'
-        wizard.state = 'awaitingUser'
-        wizard.stepIndex = 1
-        wizard.error = null
-        renderWizard()
-        startWizardPolling()
-      } catch (error) {
-        toast('error', '打不开登录窗', String(error?.message || error))
-      }
-      button.disabled = false
-      button.textContent = '窗口登录 WebVPN'
+      await withBusy(button, '正在打开登录窗…', async () => {
+        try {
+          const ticket = await authWebvpnLogin()
+          // 先复位向导，再切到网关 scope；后端 auth://progress 会继续驱动状态。
+          openWizard()
+          wizard.ticket = ticket?.id || ''
+          wizard.scope = 'gateway'
+          wizard.mode = 'WebView'
+          wizard.state = 'awaitingUser'
+          wizard.stepIndex = 1
+          wizard.error = null
+          renderWizard()
+          startWizardPolling()
+        } catch (error) {
+          toast('error', '打不开登录窗', String(error?.message || error))
+        }
+      })
       break
     }
     case 'webvpn-save': {
@@ -990,25 +1380,27 @@ document.addEventListener('click', async (event) => {
       if (!draft) break
       const cookie = (draft.webvpnCookie || '').trim()
       draft.webvpnCookie = ''
-      await api('settings.save', { settings: { webvpn: cookie ? { cookie } : {} } })
+      await withBusy(button, '保存中…', () =>
+        api('settings.save', { settings: { webvpn: cookie ? { cookie } : {} } }),
+      )
       break
     }
     case 'webvpn-clear-cookie': {
       if (drafts.settings) drafts.settings.webvpnCookie = ''
-      await api('settings.save', { settings: { webvpn: { clearCookie: true } } })
+      await withBusy(button, '清除中…', () =>
+        api('settings.save', { settings: { webvpn: { clearCookie: true } } }),
+      )
       break
     }
     case 'llm-save': {
       const key = (drafts.settings?.key || '').trim()
       if (!key) return toast('error', 'Key 是空的', '要么填一个，要么用环境变量')
-      const result = await api('llm.key', { apiKey: key })
+      const result = await withBusy(button, '保存中…', () => api('llm.key', { apiKey: key }))
       if (result?.ok) drafts.settings.key = ''
       break
     }
     case 'llm-test': {
-      button.disabled = true
-      button.textContent = '测试中…'
-      await api('llm.test')
+      await withBusy(button, '测试中…', () => api('llm.test'))
       break
     }
     case 'account-save': {
@@ -1020,11 +1412,9 @@ document.addEventListener('click', async (event) => {
       if (!casBase || !service) return toast('error', '缺认证地址', '填一下认证入口和登录后返回的地址')
       if (!username) return toast('error', '缺账号', '填一下学号或账号')
       if (!password && !state?.meta?.account?.configured) return toast('error', '缺密码', '第一次保存需要填密码')
-      button.disabled = true
-      button.textContent = '登录中…'
-      const result = await api('account.save', { casBase, service, username, password })
-      button.disabled = false
-      button.textContent = '保存并登录'
+      const result = await withBusy(button, '登录中…', () =>
+        api('account.save', { casBase, service, username, password }),
+      )
       if (result?.ok) {
         drafts.settings.accountPassword = ''
         toast('ok', '自动登录可用', result.message || '已保存账号密码')
@@ -1032,11 +1422,7 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'account-test': {
-      button.disabled = true
-      button.textContent = '登录中…'
-      const result = await api('account.test')
-      button.disabled = false
-      button.textContent = '测试自动登录'
+      const result = await withBusy(button, '登录中…', () => api('account.test'))
       if (result?.ok) toast('ok', '自动登录成功', result.message || '')
       break
     }
@@ -1050,17 +1436,13 @@ document.addEventListener('click', async (event) => {
       }
       break
     case 'notify-test':
-      await api('notify.test')
+      await withBusy(button, '测试中…', () => api('notify.test'))
       break
     case 'rescore':
-      button.disabled = true
-      button.textContent = '重算中…'
-      await api('notices.rescore')
+      await withBusy(button, '重算中…', () => api('notices.rescore'))
       break
     case 'refill':
-      button.disabled = true
-      button.textContent = '补齐中…'
-      await api('notices.refill', { limit: 40 })
+      await withBusy(button, '补齐中…', () => api('notices.refill', { limit: 40 }))
       break
     case 'open-login':
       openWizard()
@@ -1113,31 +1495,28 @@ document.addEventListener('click', async (event) => {
         wizard.mode = 'WebView'
         renderWizard()
       }
-      button.disabled = true
-      const label = spec.action
-      button.textContent = '处理中…'
-      try {
-        const ticket = await authBegin(wizard.scope, wizard.mode)
-        wizard.ticket = ticket?.id || ''
-        startWizardPolling()
-        if (wizard.mode === 'Password') {
-          wizard.state = 'launching'
-          wizard.stepIndex = 1
-        } else if (wizard.mode === 'WebView') {
-          wizard.state = 'launching'
-          wizard.stepIndex = 0
-        } else {
-          wizard.state = 'awaitingUser'
-          wizard.stepIndex = 1
+      await withBusy(button, '处理中…', async () => {
+        try {
+          const ticket = await authBegin(wizard.scope, wizard.mode)
+          wizard.ticket = ticket?.id || ''
+          startWizardPolling()
+          if (wizard.mode === 'Password') {
+            wizard.state = 'launching'
+            wizard.stepIndex = 1
+          } else if (wizard.mode === 'WebView') {
+            wizard.state = 'launching'
+            wizard.stepIndex = 0
+          } else {
+            wizard.state = 'awaitingUser'
+            wizard.stepIndex = 1
+          }
+        } catch (error) {
+          wizard.state = 'failed'
+          const code = 'AUTH_E_' + String(error?.code || 'INTERNAL').toUpperCase()
+          const copy = AUTH_ERROR_COPY[code] || AUTH_ERROR_COPY.AUTH_E_INTERNAL
+          wizard.error = { code, message: String(error?.message || error), next: copy.next }
         }
-      } catch (error) {
-        wizard.state = 'failed'
-        const code = 'AUTH_E_' + String(error?.code || 'INTERNAL').toUpperCase()
-        const copy = AUTH_ERROR_COPY[code] || AUTH_ERROR_COPY.AUTH_E_INTERNAL
-        wizard.error = { code, message: String(error?.message || error), next: copy.next }
-      }
-      button.disabled = false
-      button.textContent = label
+      })
       renderWizard()
       break
     }
@@ -1290,10 +1669,35 @@ function stopWizardPolling() {
   wizardPollTimer = null
 }
 
+/* ------------------------------ 抓取范围浮窗 ------------------------------ */
+
+/** 打开抓取浮窗：用设置页默认值回填，临时范围不写回设置。 */
+function openPollRange() {
+  const dialog = $('#poll-range-dialog')
+  if (!dialog) return
+  const settings = state?.settings || {}
+  const startEl = $('#poll-range-start')
+  const endEl = $('#poll-range-end')
+  if (startEl) startEl.value = settings.dateRangeStart || ''
+  if (endEl) endEl.value = settings.dateRangeEnd || ''
+  syncRangePresetState('poll')
+  dialog.hidden = false
+}
+
+function closePollRange() {
+  const dialog = $('#poll-range-dialog')
+  if (dialog) dialog.hidden = true
+}
+
 /* ------------------------------ 启动 ------------------------------ */
 
-$('#btn-poll').addEventListener('click', () => api('poll'))
+$('#btn-poll').addEventListener('click', openPollRange)
 $('#btn-notify').addEventListener('click', ensureNotifyPermission)
+
+/* 手改浮窗日期即「自定义」：静态节点，只在启动时各绑一次，openPollRange 里不再绑定 */
+for (const rangeInputId of ['poll-range-start', 'poll-range-end']) {
+  $(`#${rangeInputId}`)?.addEventListener('change', () => syncRangePresetState('poll'))
+}
 
 /* 外链统一走 opener（S5 白名单），顺带记已读 */
 document.addEventListener('click', (event) => {
@@ -1306,6 +1710,8 @@ document.addEventListener('click', (event) => {
 })
 
 async function boot() {
+  // 首屏骨架：读取 state 前避免白屏（数据到达后由 render 覆盖）
+  renderSkeleton()
   try {
     await fetchState()
   } catch {
@@ -1330,9 +1736,31 @@ async function boot() {
       bar.hidden = false
       const pct = payload.total ? Math.round((payload.done / payload.total) * 100) : 30
       bar.querySelector('i').style.width = `${pct}%`
-      $('#status-line').textContent = `正在抓取 ${payload.sourceId || ''}（${payload.done}/${payload.total}）`
+      if (!attachmentProgress) {
+        $('#status-line').textContent = `正在抓取 ${payload.sourceId || ''}（${payload.done}/${payload.total}）`
+      }
     } else {
       bar.hidden = true
+    }
+  })
+  listenTauri('attachment://progress', (payload) => {
+    const bar = $('#poll-progress')
+    if (!payload || payload.phase === 'done') {
+      attachmentProgress = null
+      if (bar) bar.hidden = true
+      render(true)
+      return
+    }
+    attachmentProgress = {
+      done: Number(payload.done) || 0,
+      total: Number(payload.total) || 0,
+      fileName: String(payload.fileName || ''),
+    }
+    $('#status-line').textContent = `正在下载附件 ${attachmentProgress.done}/${attachmentProgress.total}`
+    if (bar) {
+      bar.hidden = false
+      const total = attachmentProgress.total
+      bar.querySelector('i').style.width = `${total ? Math.round((attachmentProgress.done / total) * 100) : 30}%`
     }
   })
   listenTauri('auth://progress', (payload) => {

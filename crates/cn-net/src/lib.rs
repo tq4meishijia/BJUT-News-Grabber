@@ -36,6 +36,8 @@ pub use webvpn::{
 
 /// 默认响应体上限 6 MiB（B10）。
 pub const DEFAULT_MAX_BYTES: usize = 6 * 1024 * 1024;
+/// 附件响应体上限 25 MiB（B5）：仅附件请求覆写，普通请求仍用 6 MiB。
+pub const ATTACHMENT_MAX_BYTES: usize = 25 * 1024 * 1024;
 /// 列表抓取重定向上限（B10）。
 pub const LIST_REDIRECTS: u8 = 4;
 /// 登录流程重定向上限（B10）。

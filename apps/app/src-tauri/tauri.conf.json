@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "校园通知",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "edu.bjut.campus-notice",
   "build": {
     "frontendDist": "../ui"

@@ -10,6 +10,7 @@
 //! 而本 crate 禁止读系统时钟，时间必须显式注入。
 
 pub mod constants;
+pub mod attachments;
 pub mod contact;
 pub mod content;
 pub mod date;
@@ -25,9 +26,17 @@ pub mod tags;
 pub mod text;
 
 pub use constants::{is_noise_title, DefaultSource, DEFAULT_KEYWORDS, DEFAULT_SOURCES, NOTICE_WORDS};
+pub use attachments::{
+    extract_attachment_links, is_allowed_extension, normalize_attachment_url, sanitize_file_name,
+    extension_of, AttachmentLink, ALLOWED_ATTACHMENT_EXTS,
+};
 pub use contact::find_contact;
 pub use content::extract_main_content;
-pub use date::{days_until, find_date, find_deadline, iso_date, pad2, parse_due_local, parse_feed_date};
+pub use date::{
+    days_until, find_date, find_deadline, in_date_range, is_iso_day, iso_date, pad2,
+    parse_due_local, parse_feed_date, validate_range, DateRange, INVALID_DATE_MESSAGE,
+    START_AFTER_END_MESSAGE, START_AFTER_TODAY_MESSAGE,
+};
 pub use normalize::{countdown_text, describe_minutes, normalize_due};
 pub use parse_html::parse_html_list;
 pub use parse_json::{guess_list, parse_json_list, pick_path};

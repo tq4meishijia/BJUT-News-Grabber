@@ -67,6 +67,11 @@ export function openExternal(url) {
   window.open(url, '_blank', 'noopener')
 }
 
+/** 打开本地附件（走 open_attachment 命令，Rust 侧校验路径白名单）。 */
+export async function openAttachment(path) {
+  return await T.core.invoke('open_attachment', { path })
+}
+
 /** 桌面通知（notification 插件；失败时 UI 内提示兜底）。 */
 export async function notifySystem(title, body) {
   try {

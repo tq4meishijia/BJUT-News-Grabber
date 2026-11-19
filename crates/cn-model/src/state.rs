@@ -96,6 +96,15 @@ pub struct SettingsDto {
     pub notify: bool,
     #[serde(default)]
     pub webvpn: WebvpnDto,
+    /// 默认抓取起始日期（YYYY-MM-DD，空 = 不限最早）。
+    #[serde(default)]
+    pub date_range_start: String,
+    /// 默认抓取结束日期（YYYY-MM-DD，空 = 不限最晚）。
+    #[serde(default)]
+    pub date_range_end: String,
+    /// 自动抓取附件总开关（默认关闭）。
+    #[serde(default)]
+    pub fetch_attachments: bool,
 }
 
 fn default_true() -> bool {
@@ -131,8 +140,50 @@ impl Default for SettingsDto {
             detail_limit: default_detail_limit(),
             notify: true,
             webvpn: WebvpnDto::default(),
+            date_range_start: String::new(),
+            date_range_end: String::new(),
+            fetch_attachments: false,
         }
     }
+}
+
+/// 附件下载状态（唯一定义处；cn-store 与前端都引用本枚举）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AttachmentStatus {
+    /// 已下载，本地文件在盘。
+    Downloaded,
+    /// 发现链接但未落盘 / 打开时文件不在。
+    #[default]
+    Missing,
+    /// 三次重试耗尽，error 带原因。
+    Failed,
+    /// 超过 25 MiB 上限，不重试不落盘。
+    TooLarge,
+}
+
+/// 附件视图（`state.attachments[]`，已截断到 300；localPath 为绝对路径）。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentDto {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub notice_ids: Vec<String>,
+    #[serde(default)]
+    pub source_url: String,
+    #[serde(default)]
+    pub file_name: String,
+    #[serde(default)]
+    pub status: AttachmentStatus,
+    #[serde(default)]
+    pub size_bytes: u64,
+    #[serde(default)]
+    pub fetched_at: String,
+    #[serde(default)]
+    pub error: String,
+    #[serde(default)]
+    pub local_path: String,
 }
 
 /// 数据源视图（`state.sources[]`）：`cookie` 换成 `hasCookie`，含 `loginExpired`。
@@ -365,15 +416,19 @@ pub struct StateDto {
     /// 前 300 条（B12）。
     #[serde(default)]
     pub items: Vec<StateItemDto>,
+    /// 附件记录（前 300 条），前端按 noticeIds 分组到通知卡。
+    #[serde(default)]
+    pub attachments: Vec<AttachmentDto>,
     #[serde(default)]
     pub meta: MetaDto,
 }
 
 impl StateDto {
-    /// 按 B12 截断：notices 200 / items 300 / reminders 20。
+    /// 按 B12 截断：notices 200 / items 300 / reminders 20；附件 300。
     pub fn trim_to_view(&mut self) {
         self.notices.truncate(200);
         self.items.truncate(300);
         self.meta.reminders.truncate(20);
+        self.attachments.truncate(300);
     }
 }

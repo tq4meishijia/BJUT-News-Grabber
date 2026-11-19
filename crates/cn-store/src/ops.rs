@@ -25,7 +25,26 @@ impl CampusService {
         let p = &req.payload;
         match op {
             "poll" => {
-                let outcome = self.poll("manual").await;
+                // 临时范围仅本次生效；省略 dateRange 时使用 settings 的默认范围。
+                // 校验失败时提前返回 result_err（自带 state），不修改任何设置。
+                let today = self.clock.now().format("%Y-%m-%d").to_string();
+                let (start, end) = match p.get("dateRange").filter(|v| v.is_object()) {
+                    Some(range) => (str_field(range, "start"), str_field(range, "end")),
+                    None => (
+                        self.store.settings.date_range_start.clone(),
+                        self.store.settings.date_range_end.clone(),
+                    ),
+                };
+                let range = match cn_core::validate_range(&start, &end, &today) {
+                    Ok(r) => r,
+                    Err(message) => return self.result_err(message),
+                };
+                let active = if range.start.is_empty() && range.end.is_empty() {
+                    None
+                } else {
+                    Some(range)
+                };
+                let outcome = self.poll_with_range("manual", active).await;
                 self.result_with_message(outcome.ok, Some(outcome.message))
             }
             "notice.read" => {
@@ -43,8 +62,47 @@ impl CampusService {
             }
             "notice.remove" => {
                 let id = str_field(p, "id");
-                self.store.notices.retain(|n| n.id != id);
-                self.save_ok()
+                self.remove_notice_and_attachments(&id);
+                self.result_ok(None, None)
+            }
+            "attachment.retry" => {
+                let id = str_field(p, "id");
+                if !self.store.attachments.iter().any(|a| a.id == id) {
+                    return self.result_err("找不到这个附件");
+                }
+                let vpn = self.webvpn_config();
+                let dir = self.attachments_dir();
+                let mut logs: Vec<String> = Vec::new();
+                let found = crate::attachments::retry_attachment(
+                    self.fetcher.as_ref(),
+                    &vpn,
+                    &dir,
+                    &mut self.store,
+                    &id,
+                    self.clock.as_ref(),
+                    &mut logs,
+                )
+                .await;
+                for text in logs {
+                    self.emit_pub(crate::service::AppEvent::Log { text });
+                }
+                let _ = self.save();
+                if found {
+                    let status = self
+                        .store
+                        .attachments
+                        .iter()
+                        .find(|a| a.id == id)
+                        .map(|a| a.status)
+                        .unwrap_or_default();
+                    if status == cn_model::AttachmentStatus::Downloaded {
+                        self.result_with_message(true, Some("附件已重新下载".to_string()))
+                    } else {
+                        self.result_err("附件仍然下载失败，请稍后再试")
+                    }
+                } else {
+                    self.result_err("找不到这个附件")
+                }
             }
             "notice.summarize" => self.notice_summarize(&str_field(p, "id")).await,
             "notices.rescore" => {
@@ -553,6 +611,21 @@ impl CampusService {
 
     fn settings_save(&mut self, p: &Value) -> cn_model::ActionResult {
         let patch = p.get("settings").cloned().unwrap_or(Value::Null);
+        // 日期先于任何字段赋值校验：失败直接返回带 state 的错误，供前端回滚。
+        let today = self.clock.now().format("%Y-%m-%d").to_string();
+        let candidate_start = patch
+            .get("dateRangeStart")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.store.settings.date_range_start.clone());
+        let candidate_end = patch
+            .get("dateRangeEnd")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.store.settings.date_range_end.clone());
+        if let Err(message) = cn_core::validate_range(&candidate_start, &candidate_end, &today) {
+            return self.result_err(message);
+        }
         let s = &mut self.store.settings;
         if let Some(v) = patch.get("pollMinutes").and_then(|v| v.as_f64()) {
             s.poll_minutes = cn_model::state::number_or(Some(v), 5, 5, 1440);
@@ -566,13 +639,14 @@ impl CampusService {
                 .take(200)
                 .collect();
         }
-        for key in ["llm", "autoSchedule", "fetchDetail", "notify"] {
+        for key in ["llm", "autoSchedule", "fetchDetail", "notify", "fetchAttachments"] {
             if let Some(v) = patch.get(key).and_then(|v| v.as_bool()) {
                 match key {
                     "llm" => s.llm = v,
                     "autoSchedule" => s.auto_schedule = v,
                     "fetchDetail" => s.fetch_detail = v,
                     "notify" => s.notify = v,
+                    "fetchAttachments" => s.fetch_attachments = v,
                     _ => {}
                 }
             }
@@ -591,6 +665,12 @@ impl CampusService {
                 1,
                 200,
             );
+        }
+        if patch.get("dateRangeStart").is_some() || patch.get("dateRangeEnd").is_some() {
+            // 原样保存用户输入（trim 后）；end > today 的 clamp 在每次抓取时做，
+            // 否则结束日期会被冻结在保存当天，之后发布的通知会被全部过滤。
+            s.date_range_start = candidate_start.trim().to_string();
+            s.date_range_end = candidate_end.trim().to_string();
         }
         if let Some(list) = patch.get("autoRemindBefore").and_then(|v| v.as_array()) {
             if !list.is_empty() {

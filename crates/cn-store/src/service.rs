@@ -5,10 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cn_model::Clock;
+use cn_core::DateRange;
 use cn_llm::{LlmCache, LlmNotice, TokenMeter};
 use cn_model::{
-    AccountDto, ActionResult, NoticeDto, PreviewItem, ReminderDto, SettingsDto, SourceDto,
-    StateDto, StateItemDto, StatusDto, WebvpnDto,
+    AccountDto, ActionResult, AttachmentDto, NoticeDto, PreviewItem, ReminderDto, SettingsDto,
+    SourceDto, StateDto, StateItemDto, StatusDto, WebvpnDto,
 };
 
 use crate::error::StoreError;
@@ -28,6 +29,12 @@ pub enum AppEvent {
     StateChanged { version: u64 },
     Reminder { title: String, label: String },
     Log { text: String },
+    /// 附件下载进度（T04 桥接成 `attachment://progress`）。
+    AttachmentProgress {
+        done: usize,
+        total: usize,
+        file_name: String,
+    },
 }
 
 /// 流水线时序参数（测试可调零，生产用默认值）。
@@ -174,6 +181,27 @@ impl CampusService {
         self.emit(event);
     }
 
+    /// 附件落盘目录：`store.json` 同级的 `attachments/`（生产即 data_dir/attachments）。
+    pub fn attachments_dir(&self) -> PathBuf {
+        self.store_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("attachments")
+    }
+
+    /// 删除通知并级联删除最后一个引用所对应的本地附件与记录（B12 / B8）。
+    /// 文件 IO 失败只记日志，不影响 op 成功。
+    pub fn remove_notice_and_attachments(&mut self, id: &str) {
+        let dir = self.attachments_dir();
+        let mut logs: Vec<String> = Vec::new();
+        crate::attachments::cascade_remove(&mut self.store, &dir, id, &mut logs);
+        self.store.notices.retain(|n| n.id != id);
+        for text in logs {
+            self.emit(AppEvent::Log { text });
+        }
+        let _ = self.save();
+    }
+
     /// 保存（原子落盘）+ 版本递增 + 广播。
     pub fn save(&self) -> Result<(), StoreError> {
         crate::persist::save_store(&self.store_path, &self.store)?;
@@ -237,6 +265,9 @@ impl CampusService {
             detail_limit: self.store.settings.detail_limit,
             notify: self.store.settings.notify,
             webvpn,
+            date_range_start: self.store.settings.date_range_start.clone(),
+            date_range_end: self.store.settings.date_range_end.clone(),
+            fetch_attachments: self.store.settings.fetch_attachments,
         };
         let sources = self
             .store
@@ -312,11 +343,33 @@ impl CampusService {
         let account = self.config.account.clone().unwrap_or_default();
         let configured = self.can_auto_login();
         let (llm_used, llm_budget) = self.llm_meter.usage(self.clock.now());
+        let attachments_dir = self.attachments_dir();
+        let attachments: Vec<AttachmentDto> = self
+            .store
+            .attachments
+            .iter()
+            .take(300)
+            .map(|a| AttachmentDto {
+                id: a.id.clone(),
+                notice_ids: a.notice_ids.clone(),
+                source_url: a.source_url.clone(),
+                file_name: a.file_name.clone(),
+                status: a.status,
+                size_bytes: a.size_bytes,
+                fetched_at: a.fetched_at.clone(),
+                error: a.error.clone(),
+                local_path: attachments_dir
+                    .join(&a.local_path)
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+            .collect();
         StateDto {
             settings,
             sources,
             notices,
             items,
+            attachments,
             meta: cn_model::MetaDto {
                 last_poll_at: self.store.meta.last_poll_at.clone(),
                 last_poll_error: self.store.meta.last_poll_error.clone(),
@@ -547,17 +600,30 @@ impl CampusService {
     }
 
     /// `store.mjs::poll`（§4.1 十二步流水线，B1/B2/B3/B4/B5/B7/B11）。
+    /// 托盘 / 定时器入口：使用设置页的默认时间范围；校验失败降级为不过滤（绝不 panic）。
     pub async fn poll(&mut self, reason: &str) -> PollOutcome {
+        let today = self.clock.now().format("%Y-%m-%d").to_string();
+        let start = self.store.settings.date_range_start.clone();
+        let end = self.store.settings.date_range_end.clone();
+        let range = match cn_core::validate_range(&start, &end, &today) {
+            Ok(active) if !(active.start.is_empty() && active.end.is_empty()) => Some(active),
+            _ => None,
+        };
+        self.poll_with_range(reason, range).await
+    }
+
+    /// 带本次抓取时间范围（不写回 settings）的抓取入口。
+    pub async fn poll_with_range(&mut self, reason: &str, range: Option<DateRange>) -> PollOutcome {
         let _ = reason;
         if self.polling.swap(true, Ordering::SeqCst) {
             return PollOutcome::fail("正在抓取中");
         }
-        let outcome = self.poll_inner().await;
+        let outcome = self.poll_inner(range).await;
         self.polling.store(false, Ordering::SeqCst);
         outcome
     }
 
-    async fn poll_inner(&mut self) -> PollOutcome {
+    async fn poll_inner(&mut self, range: Option<DateRange>) -> PollOutcome {
         let started_at = self.clock.now().to_rfc3339();
         let deadline_instant = self.clock.now() + chrono::Duration::from_std(self.options.total_timeout).unwrap_or_default();
         let enabled: Vec<SourceRecord> = self
@@ -582,6 +648,11 @@ impl CampusService {
             .collect();
         let mut known = known;
         let mut fresh: Vec<NoticeRecord> = Vec::new();
+        // 本次抓取统计（不写回 settings）。
+        let mut date_skipped = 0usize;
+        let mut attachments_downloaded = 0usize;
+        let mut attachments_failed = 0usize;
+        let mut attachments_skipped = 0usize;
 
         // B2：登录态过期时自动登录重试一轮，只重跑失败的那几个源。
         let attempts = if self.can_auto_login() { 2 } else { 1 };
@@ -620,6 +691,14 @@ impl CampusService {
                             .collect();
                         let mut added = 0u32;
                         for item in sliced {
+                            // 时间过滤必须在最前面：范围外通知不建去重键、不进 known，
+                            // 也就不会进详情 / LLM / 建日程（A3）。
+                            if let Some(active) = range.as_ref() {
+                                if !cn_core::in_date_range(&item.published_at, active) {
+                                    date_skipped += 1;
+                                    continue;
+                                }
+                            }
                             let dedupe_key = pipeline::build_dedupe_key(&source.id, &item.title);
                             if known.contains(&dedupe_key) {
                                 continue;
@@ -686,9 +765,28 @@ impl CampusService {
         }
 
         // 详情跟进（B3）：按标题命中关键词数排序，限 10–40。
-        if self.store.settings.fetch_detail && !fresh.is_empty() {
+        // 附件发现复用这一循环（一次请求既取正文又提取链接），不额外翻倍请求。
+        // T06 附件追溯补抓：附件开关开启时，从已入库通知中挑「尚无附件记录」的补位
+        // （按 published_at 倒序，新的优先），总数仍受 limit 约束，避免一次几百条
+        // 历史通知把抓取拖死。关闭附件开关时候选集只含 fresh，行为与改动前完全一致。
+        let detail_enabled = self.store.settings.fetch_detail;
+        let attachments_enabled = self.store.settings.fetch_attachments;
+        let mut attachment_events: Vec<(usize, usize, String)> = Vec::new();
+        let mut attachment_logs: Vec<String> = Vec::new();
+        let mut attempted_attachments: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if detail_enabled || attachments_enabled {
+            // 本轮处理对象：fresh 用下标（尚未并入 store.notices），历史通知用 id 定位
+            // （候选来源不同，下标会错位）。
+            enum Candidate {
+                Fresh(usize),
+                History(String),
+            }
             let keywords = self.store.settings.keywords.clone();
             let limit = self.store.settings.detail_limit.clamp(10, 40) as usize;
+            let vpn_for_attachments = self.webvpn_config();
+            let dir_for_attachments = self.attachments_dir();
+
+            // 1) fresh 候选：保持原有「关键词命中数倒序」排序。
             let mut ranked: Vec<(usize, usize)> = fresh
                 .iter()
                 .enumerate()
@@ -701,38 +799,198 @@ impl CampusService {
                 })
                 .collect();
             ranked.sort_by_key(|entry| std::cmp::Reverse(entry.1));
-            for (idx, _) in ranked.into_iter().take(limit) {
+            let mut candidates: Vec<Candidate> = ranked
+                .into_iter()
+                .take(limit)
+                .map(|(idx, _)| Candidate::Fresh(idx))
+                .collect();
+
+            // 2) 历史补抓候选：仅附件开关开启且有剩余名额时补位（T06）。
+            //    快照「已有附件的通知 id」集合，避免在 filter 闭包里反复扫描 attachments。
+            let mut history_added = 0usize;
+            if attachments_enabled && candidates.len() < limit {
+                let fresh_ids: std::collections::HashSet<String> =
+                    fresh.iter().map(|n| n.id.clone()).collect();
+                let attached_ids: std::collections::HashSet<String> = self
+                    .store
+                    .attachments
+                    .iter()
+                    .flat_map(|a| a.notice_ids.iter().cloned())
+                    .collect();
+                let mut history: Vec<(String, String)> = self
+                    .store
+                    .notices
+                    .iter()
+                    .filter(|n| {
+                        !fresh_ids.contains(&n.id)
+                            && !attached_ids.contains(&n.id)
+                            // T06b 负缓存：只挑「从未扫描过附件」的通知，避免无附件的
+                            // 老通知每轮重复占用补抓名额、其他通知永远轮不到。
+                            && n.attachments_scanned_at.is_empty()
+                    })
+                    .map(|n| {
+                        // 排序键：有发布日期用日期，否则退回抓取时间（同为 ISO 串，字典序即时间序）。
+                        let sort_key = if n.published_at.is_empty() {
+                            n.fetched_at.clone()
+                        } else {
+                            n.published_at.clone()
+                        };
+                        (sort_key, n.id.clone())
+                    })
+                    .collect();
+                history.sort_by(|a, b| b.0.cmp(&a.0));
+                for (_, id) in history.into_iter().take(limit - candidates.len()) {
+                    candidates.push(Candidate::History(id));
+                    history_added += 1;
+                }
+                if history_added > 0 {
+                    attachment_logs.push(format!("附件补抓 {history_added} 条历史通知"));
+                }
+            }
+
+            // 3) 逐条处理：fresh 与历史补抓都走一次详情请求（正文 + 附件 HTML）。
+            for candidate in candidates {
                 if self.clock.now() > deadline_instant {
                     break;
                 }
-                let source_id = fresh[idx].source_id.clone();
-                let Some(source) = self
-                    .store
-                    .sources
-                    .iter()
-                    .find(|s| s.id == source_id)
-                    .cloned()
-                else {
-                    continue;
-                };
-                if fresh[idx].url.is_empty() && source.detail_url_template.is_empty() {
-                    continue;
+                match candidate {
+                    Candidate::Fresh(idx) => {
+                        let source_id = fresh[idx].source_id.clone();
+                        let Some(source) = self
+                            .store
+                            .sources
+                            .iter()
+                            .find(|s| s.id == source_id)
+                            .cloned()
+                        else {
+                            continue;
+                        };
+                        if fresh[idx].url.is_empty() && source.detail_url_template.is_empty() {
+                            continue;
+                        }
+                        if !fresh[idx].url.is_empty() && fresh[idx].url == source.url {
+                            continue;
+                        }
+                        let bundle = pipeline::fetch_detail_bundle(
+                            self.fetcher.as_ref(),
+                            &fresh[idx],
+                            &source,
+                            &vpn_for_attachments,
+                        )
+                        .await;
+                        if detail_enabled && !bundle.text.is_empty() {
+                            fresh[idx].content = cn_core::strip_red_header(&bundle.text);
+                        }
+                        if attachments_enabled {
+                            let id_seed = self.next_counter();
+                            let stats = crate::attachments::discover_and_download(
+                                self.fetcher.as_ref(),
+                                &vpn_for_attachments,
+                                &dir_for_attachments,
+                                &mut self.store,
+                                &source,
+                                &fresh[idx],
+                                &bundle,
+                                self.clock.as_ref(),
+                                &mut attempted_attachments,
+                                id_seed,
+                                &mut attachment_logs,
+                                |done, total, file_name| {
+                                    attachment_events.push((done, total, file_name));
+                                },
+                            )
+                            .await;
+                            attachments_downloaded += stats.downloaded;
+                            attachments_failed += stats.failed;
+                            attachments_skipped += stats.skipped;
+                            // T06b：fresh 通知同样记扫描时间（与历史补抓口径一致，
+                            // 便于诊断与未来扩展；fresh 本身靠去重不会重复入选）。
+                            fresh[idx].attachments_scanned_at = self.clock.now().to_rfc3339();
+                        }
+                        sleep(self.options.detail_gap).await;
+                    }
+                    Candidate::History(id) => {
+                        // 快照通知与数据源：随后既要 &mut self.store 写回正文，又要把它
+                        // 交给附件发现函数，克隆可彻底规避「同时借 notices 与 &mut store」。
+                        let Some(notice) = self.store.notices.iter().find(|n| n.id == id).cloned()
+                        else {
+                            continue;
+                        };
+                        let Some(source) = self
+                            .store
+                            .sources
+                            .iter()
+                            .find(|s| s.id == notice.source_id)
+                            .cloned()
+                        else {
+                            continue;
+                        };
+                        if notice.url.is_empty() && source.detail_url_template.is_empty() {
+                            continue;
+                        }
+                        if !notice.url.is_empty() && notice.url == source.url {
+                            continue;
+                        }
+                        // 附件链接只能从详情 HTML 提取，不能用已存的纯文本 content。
+                        let bundle = pipeline::fetch_detail_bundle(
+                            self.fetcher.as_ref(),
+                            &notice,
+                            &source,
+                            &vpn_for_attachments,
+                        )
+                        .await;
+                        // 顺带收益：原正文为空且用户开启详情跟进时补正文；
+                        // 关闭详情跟进时只取 HTML 供附件解析，不写 content（尊重设置）。
+                        if detail_enabled && notice.content.is_empty() && !bundle.text.is_empty() {
+                            let content = cn_core::strip_red_header(&bundle.text);
+                            if let Some(record) = self.store.notices.iter_mut().find(|n| n.id == id) {
+                                record.content = content;
+                            }
+                        }
+                        if attachments_enabled {
+                            let id_seed = self.next_counter();
+                            let stats = crate::attachments::discover_and_download(
+                                self.fetcher.as_ref(),
+                                &vpn_for_attachments,
+                                &dir_for_attachments,
+                                &mut self.store,
+                                &source,
+                                &notice,
+                                &bundle,
+                                self.clock.as_ref(),
+                                &mut attempted_attachments,
+                                id_seed,
+                                &mut attachment_logs,
+                                |done, total, file_name| {
+                                    attachment_events.push((done, total, file_name));
+                                },
+                            )
+                            .await;
+                            attachments_downloaded += stats.downloaded;
+                            attachments_failed += stats.failed;
+                            attachments_skipped += stats.skipped;
+                        }
+                        // T06b 负缓存：扫描完成即记账——无论是否发现附件、下载成功或失败、
+                        // 甚至详情请求网络失败（bundle 为空）都写入，避免同一条老通知每轮
+                        // 重复占用补抓名额、把其它通知永远挡在门外。
+                        let scanned_at = self.clock.now().to_rfc3339();
+                        if let Some(record) = self.store.notices.iter_mut().find(|n| n.id == id) {
+                            record.attachments_scanned_at = scanned_at;
+                        }
+                        sleep(self.options.detail_gap).await;
+                    }
                 }
-                if !fresh[idx].url.is_empty() && fresh[idx].url == source.url {
-                    continue;
-                }
-                let detail = pipeline::fetch_detail_text(
-                    self.fetcher.as_ref(),
-                    &fresh[idx],
-                    &source,
-                    &self.webvpn_config(),
-                )
-                .await;
-                if !detail.is_empty() {
-                    fresh[idx].content = cn_core::strip_red_header(&detail);
-                }
-                sleep(self.options.detail_gap).await;
             }
+        }
+        for (done, total, file_name) in attachment_events {
+            self.emit(AppEvent::AttachmentProgress {
+                done,
+                total,
+                file_name,
+            });
+        }
+        for text in attachment_logs {
+            self.emit(AppEvent::Log { text });
         }
 
         // LLM 批量 + 逐条补全（B11）。
@@ -814,17 +1072,31 @@ impl CampusService {
         let _ = self.save();
 
         let added = fresh.len();
+        let mut details: Vec<String> = Vec::new();
+        if date_skipped > 0 {
+            details.push(format!("时间范围跳过 {date_skipped} 条"));
+        }
+        if attachments_downloaded > 0 || attachments_failed > 0 || attachments_skipped > 0 {
+            details.push(format!(
+                "附件成功 {attachments_downloaded}、失败 {attachments_failed}、跳过 {attachments_skipped}"
+            ));
+        }
+        if !failures.is_empty() {
+            details.push(format!("{} 个数据源失败", failures.len()));
+        }
+        let message = if details.is_empty() {
+            format!("新增 {added} 条通知")
+        } else {
+            format!("新增 {added} 条通知（{}）", details.join("；"))
+        };
         PollOutcome {
             ok: true,
-            message: format!(
-                "新增 {added} 条通知{}",
-                if failures.is_empty() {
-                    String::new()
-                } else {
-                    format!("，{} 个数据源失败", failures.len())
-                }
-            ),
+            message,
             added,
+            date_skipped,
+            attachments_downloaded,
+            attachments_failed,
+            attachments_skipped,
         }
     }
 
@@ -1105,6 +1377,14 @@ pub struct PollOutcome {
     pub ok: bool,
     pub message: String,
     pub added: usize,
+    /// 因时间范围被跳过的通知条数。
+    pub date_skipped: usize,
+    /// 本次成功下载的附件数。
+    pub attachments_downloaded: usize,
+    /// 本次下载失败的附件数。
+    pub attachments_failed: usize,
+    /// 本次跳过的附件数（已存在 / 过大）。
+    pub attachments_skipped: usize,
 }
 
 impl PollOutcome {
@@ -1113,6 +1393,10 @@ impl PollOutcome {
             ok: false,
             message: message.into(),
             added: 0,
+            date_skipped: 0,
+            attachments_downloaded: 0,
+            attachments_failed: 0,
+            attachments_skipped: 0,
         }
     }
 }

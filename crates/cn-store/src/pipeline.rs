@@ -37,7 +37,8 @@ static BIZ_LOGIN_WORDS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("请登录|未登录|登录超时|重新登录").unwrap());
 
 /// 构造出站请求（B8：门户 Cookie 与网关 Cookie 分离；校外模式统一经网关出站）。
-fn build_request(url: &str, source: &SourceRecord, vpn: &WebvpnConfig, timeout_ms: u64) -> FetchRequest {
+/// `pub(crate)` 供附件下载复用同一鉴权链路（cookie / gateway_cookie / resolve_ip）。
+pub(crate) fn build_request(url: &str, source: &SourceRecord, vpn: &WebvpnConfig, timeout_ms: u64) -> FetchRequest {
     let host = url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_string()))
@@ -222,13 +223,25 @@ impl Clock for FixedAt {
     }
 }
 
-/// `store.mjs::fetchDetailText`：详情正文（接口型用 contentPath，页面型用 extract_main_content）。
-pub async fn fetch_detail_text(
+/// 一次详情请求同时带出的原始正文（供附件链接提取）与纯文本正文。
+#[derive(Debug, Clone, Default)]
+pub struct DetailBundle {
+    /// 还原网关地址后的原始 HTML / 接口正文（附件链接从这里提取）。
+    pub html: String,
+    /// 抽取后的纯文本正文（与改动前的 fetch_detail_text 完全一致）。
+    pub text: String,
+    /// 详情基址（还原后），供相对附件 URL 补全。
+    pub base_url: String,
+}
+
+/// `store.mjs::fetchDetailText` 的取数层：一次请求既供正文抽取，也供附件链接提取，
+/// 避免开启附件后详情请求翻倍。
+pub async fn fetch_detail_bundle(
     fetcher: &dyn Fetcher,
     notice: &NoticeRecord,
     source: &SourceRecord,
     vpn: &WebvpnConfig,
-) -> String {
+) -> DetailBundle {
     if !source.detail_url_template.is_empty() {
         let url = source
             .detail_url_template
@@ -236,58 +249,87 @@ pub async fn fetch_detail_text(
             .replace("{url}", &cn_core::encode_uri_component(&notice.url));
         let req = build_request(&url, source, vpn, 20_000);
         let Ok(response) = fetcher.fetch(req).await else {
-            return String::new();
+            return DetailBundle::default();
         };
         if response.status >= 400 {
-            return String::new();
+            return DetailBundle::default();
         }
         let content_type = response.header("content-type").unwrap_or("").to_string();
-        let text = decode_body(&response.body, &content_type);
-        if webvpn_session_expired(&text, vpn) {
-            return String::new();
+        let raw = decode_body(&response.body, &content_type);
+        if webvpn_session_expired(&raw, vpn) {
+            return DetailBundle::default();
         }
+        let restored = restore_urls_in_text(&raw, vpn);
+        let base_url = cn_net::restore_url(&url, vpn);
         if !source.content_path.is_empty() {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                let html = cn_core::pick_path(&json, &source.content_path)
-                    .map(|v| match v {
-                        serde_json::Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .unwrap_or_default();
-                let body = cn_core::extract_main_content(&html);
-                return if body.chars().count() >= 20 {
-                    body
-                } else {
-                    cn_core::extract_main_content(&text)
-                };
-            }
-            return String::new();
+            let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) else {
+                return DetailBundle::default();
+            };
+            let html = cn_core::pick_path(&json, &source.content_path)
+                .map(|v| match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .unwrap_or_default();
+            let body = cn_core::extract_main_content(&html);
+            return if body.chars().count() >= 20 {
+                DetailBundle {
+                    html: restore_urls_in_text(&html, vpn),
+                    text: body,
+                    base_url,
+                }
+            } else {
+                DetailBundle {
+                    html: restored,
+                    text: cn_core::extract_main_content(&raw),
+                    base_url,
+                }
+            };
         }
-        return cn_core::extract_main_content(&text);
+        return DetailBundle {
+            html: restored,
+            text: cn_core::extract_main_content(&raw),
+            base_url,
+        };
     }
     if notice.url.is_empty() {
-        return String::new();
+        return DetailBundle::default();
     }
     let req = build_request(&notice.url, source, vpn, 20_000);
     let Ok(response) = fetcher.fetch(req).await else {
-        return String::new();
+        return DetailBundle::default();
     };
     if response.status >= 400 {
-        return String::new();
+        return DetailBundle::default();
     }
     let content_type = response.header("content-type").unwrap_or("").to_string();
     let html = decode_body(&response.body, &content_type);
     if webvpn_session_expired(&html, vpn) {
-        return String::new();
+        return DetailBundle::default();
     }
     let text = cn_core::extract_main_content(&html);
-    if text.chars().count() >= 20 {
-        return text;
+    let text = if text.chars().count() >= 20 {
+        text
+    } else if Regex::new(r"(?i)<img[\s>]").unwrap().is_match(&html) {
+        "〔正文以图片或附件形式发布，建议打开原文查看〕".to_string()
+    } else {
+        text
+    };
+    DetailBundle {
+        html: restore_urls_in_text(&html, vpn),
+        text,
+        base_url: cn_net::restore_url(&notice.url, vpn),
     }
-    if Regex::new(r"(?i)<img[\s>]").unwrap().is_match(&html) {
-        return "〔正文以图片或附件形式发布，建议打开原文查看〕".to_string();
-    }
-    text
+}
+
+/// `store.mjs::fetchDetailText`：只取纯文本正文（保留原调用方）。
+pub async fn fetch_detail_text(
+    fetcher: &dyn Fetcher,
+    notice: &NoticeRecord,
+    source: &SourceRecord,
+    vpn: &WebvpnConfig,
+) -> String {
+    fetch_detail_bundle(fetcher, notice, source, vpn).await.text
 }
 
 /// B5：去重键 = 源 id + 标题 sha1 前 16 位。

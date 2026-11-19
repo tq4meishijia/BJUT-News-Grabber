@@ -6,6 +6,7 @@
 //! - 行为保留 B1–B12（详见 docs/impl-notes-p2-p3.md 对照表）。
 
 pub mod error;
+pub mod attachments;
 pub mod ops;
 pub mod persist;
 pub mod pipeline;
@@ -14,12 +15,13 @@ pub mod secrets;
 pub mod service;
 pub mod state;
 
+pub use attachments::{cascade_remove, retry_attachment, AttachmentStats};
 pub use error::StoreError;
 pub use ops::ActRequest;
 pub use persist::{load_store, save_store, save_store_crashable};
 pub use secrets::{FileSecretStore, MemSecretStore, SecretStore};
 pub use service::{AppEvent, CampusService, ItemInput, LoginOutcome, PipelineOptions, PollOutcome};
 pub use state::{
-    AppConfig, ItemRecord, NoticeRecord, ReminderRecord, SourceRecord, StoreData, StoreMeta,
-    StoreSettings, WebvpnSettings,
+    AppConfig, AttachmentRecord, ItemRecord, NoticeRecord, ReminderRecord, SourceRecord, StoreData,
+    StoreMeta, StoreSettings, WebvpnSettings,
 };

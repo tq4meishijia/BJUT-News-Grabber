@@ -32,6 +32,29 @@
     <main id="view" class="view"></main>
     <div id="toasts" class="toasts" aria-live="polite"></div>
 
+    <!-- 抓取时间范围浮窗（临时范围，仅对本次抓取生效） -->
+    <div id="poll-range-dialog" class="wizard-overlay" hidden>
+      <div class="card poll-range-card" role="dialog" aria-modal="true" aria-labelledby="poll-range-title">
+        <h2 id="poll-range-title">本次抓取时间范围</h2>
+        <p class="hint">仅对本次抓取生效，不会写入设置默认值。两端留空表示不限制。</p>
+        <div class="range-presets" role="group" aria-label="快捷时间范围">
+          <button type="button" class="btn small ghost" data-act="poll-range-preset" data-days="7" aria-pressed="false">近 7 天</button>
+          <button type="button" class="btn small ghost" data-act="poll-range-preset" data-days="30" aria-pressed="false">近 30 天</button>
+          <button type="button" class="btn small ghost" data-act="poll-range-preset" data-days="90" aria-pressed="false">近 90 天</button>
+          <button type="button" class="btn small ghost" data-act="poll-range-preset" data-days="custom" aria-pressed="false">自定义</button>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>开始日期</span><input type="date" id="poll-range-start" /></label>
+          <label class="field"><span>结束日期</span><input type="date" id="poll-range-end" /></label>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" data-act="poll-range-cancel">取消</button>
+          <button class="btn ghost" data-act="poll-range-clear">清除</button>
+          <button class="btn primary" data-act="poll-range-confirm">开始抓取</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 登录向导浮层（11 状态 + 3 步指示） -->
     <div id="login-wizard" class="wizard-overlay" hidden>
       <div class="wizard card" role="dialog" aria-modal="true" aria-labelledby="wizard-title">

@@ -21,7 +21,7 @@ jobs:
     name: Windows (安装版 + 便携版)
     runs-on: windows-latest
     env:
-      PRODUCT_VERSION: "0.2.0"
+      PRODUCT_VERSION: "0.3.0"
 
     steps:
       - name: Checkout
